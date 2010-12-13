@@ -61,14 +61,14 @@ class PlanningReport(Report):
     """
     """
     def __init__(self, parser=ReportArgParser(parents=[report_type_parser])):
-        parser.add_argument('-c', '--configs', nargs='*', default=[], 
+        parser.add_argument('-c', '--configs', type=tools.csv, default=[], 
             help='planner configurations (if none specified, use all found configs)')
-        parser.add_argument('-s', '--suite', nargs='*', default=[], 
-            help='tasks, domains or suites (if none specified, use whole suite)')
+        parser.add_argument('-s', '--suite', type=tools.csv, default=[], 
+            help=downward_suites.HELP)
         parser.add_argument('--res', default='domain', dest='resolution',
             help='resolution of the report', choices=['suite', 'domain', 'problem'])
             
-        parser.add_argument('--filter', nargs='*', default=[],
+        parser.add_argument('--filter', type=tools.csv, default=[],
                             help='filters will be applied as follows: ' \
                                 'expanded:lt:100 -> only process if run[expanded] < 100')
         
@@ -78,7 +78,7 @@ class PlanningReport(Report):
         self.output = ''
         
         # For some attributes only compare commonly solved tasks
-        self.commonly_solved_foci = ['expanded', 'generated', 'memory', 
+        self.commonly_solved_foci = ['cost', 'expanded', 'generated', 'memory', 
                                     'plan_length', 'search_time', 'total_time']
         info = 'Report only commonly solved problems for the following attributes: %s'
         info %= ', '.join(self.commonly_solved_foci)
@@ -200,7 +200,7 @@ class PlanningReport(Report):
             self.group_func = sum
             
         # Decide whether we want to highlight minima or maxima
-        max_attributes = ['solved', 'score']
+        max_attributes = ['solved', 'score', 'initial_h_value']
         min_wins = True
         for attr in max_attributes:
             if attr in self.focus:
