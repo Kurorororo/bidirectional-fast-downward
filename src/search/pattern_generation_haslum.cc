@@ -6,6 +6,7 @@
 #include "causal_graph.h"
 #include "state.h"
 #include "operator.h"
+#include "rng.h"
 
 #include <vector>
 #include <string>
@@ -33,7 +34,7 @@ void PatternGenerationHaslum::generate_successors(const PDBCollectionHeuristic &
                                                   vector<vector<int> > &successor_patterns) {
     // TODO: more efficiency?
     for (size_t i = 0; i < current_collection.get_pattern_databases().size(); ++i) {
-        vector<int> current_pattern = current_collection.get_pattern_databases()[i]->get_pattern();
+        const vector<int> &current_pattern = current_collection.get_pattern_databases()[i]->get_pattern();
         for (size_t j = 0; j < current_pattern.size(); ++j) {
             const vector<int> &relevant_vars = g_causal_graph->get_predecessors(current_pattern[j]);
             for (size_t k = 0; k < relevant_vars.size(); ++k) {
@@ -63,17 +64,16 @@ void PatternGenerationHaslum::generate_successors(vector<int> &pattern,
 
 // random walk for state sampling
 void PatternGenerationHaslum::sample_states() {
-    srand(time(NULL));
-    float b = 2.0; // TODO: correct branching factor?
-    float d = 2.0 * current_collection->compute_heuristic(*g_initial_state);
+    double b = 2.0; // TODO: correct branching factor?
+    double d = 2.0 * current_collection->compute_heuristic(*g_initial_state);
     int length = 0;
-    float denominator = pow(b, d + 1) - 1;
+    double denominator = pow(b, d + 1) - 1;
     State *current_state = g_initial_state;
     while (true) {
-        float numerator = pow(b, length + 1.0) - pow(b, length);
+        double numerator = pow(b, length + 1.0) - pow(b, length);
         double fraction = numerator / denominator;
-        float random = (rand() % 101) / 100.0; // 0.00, 0.01, ... 1.0
-        if (random <= fraction) {
+        double random = g_rng(); // [0..1)
+        if (random < fraction) {
             samples.push_back(current_state);
             break;
         }
@@ -85,7 +85,7 @@ void PatternGenerationHaslum::sample_states() {
             if (g_operators[i].is_applicable(*current_state))
                 applicable_operators.push_back(g_operators[i]);
         }
-        int random2 = rand() % applicable_operators.size();
+        int random2 = g_rng.next(applicable_operators.size()); // [0..applicalbe_operators.size())
         assert(applicable_operators[random].is_applicable(*current_state));
         
         // get new state, 
@@ -193,6 +193,6 @@ ScalarEvaluator *create(const vector<string> &config, int start, int &end, bool 
     }
     
     PatternGenerationHaslum pgh(max_pdb_memory, samples_number);
-    cout << "Haslum et. al done." << endl;
+    cout << "Haslum et al. done." << endl;
     return pgh.get_pattern_collection_heuristic();
 }
