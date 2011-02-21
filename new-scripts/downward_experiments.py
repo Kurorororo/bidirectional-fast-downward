@@ -10,14 +10,14 @@ import logging
 import shlex
 
 import experiments
+import environments
 import checkouts
 import downward_suites
 import downward_configs
 import tools
 
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-PREPROCESSED_TASKS_DIR = os.path.join(SCRIPTS_DIR, 'preprocessed-tasks')
+PREPROCESSED_TASKS_DIR = os.path.join(tools.SCRIPTS_DIR, 'preprocessed-tasks')
 tools.makedirs(PREPROCESSED_TASKS_DIR)
 
 
@@ -47,7 +47,8 @@ def require_src_dirs(exp, combinations):
     import itertools
     checkouts = set(itertools.chain(*combinations))
     for checkout in checkouts:
-        exp.add_resource('SRC_%s' % checkout.rev, checkout.src_dir, 'CODE-%s' % checkout.rev)
+        exp.add_resource('SRC_%s' % checkout.rev, checkout.src_dir,
+                         'CODE-%s' % checkout.rev)
 
 
 class DownwardRun(experiments.Run):
@@ -79,17 +80,6 @@ class DownwardRun(experiments.Run):
 
         # Add memory limit information in KB
         self.set_property('memory_limit', self.experiment.memory * 1024)
-
-        #self.set_property('config', self.ext_config)
-        #self.set_property('id', [self.ext_config, domain, problem])
-
-    @property
-    def ext_config(self):
-        # If all three parts have the same revision don't clutter the reports
-        revs = [self.translator.rev, self.preprocessor.rev, self.planner.rev]
-        if len(revs) == len(set(revs)):
-            revs = [self.translator.rev]
-        return '-'.join(revs + [self.planner_config])
 
 
 def _prepare_preprocess_run(exp, run):
@@ -138,220 +128,180 @@ def _prepare_search_run(exp, run, config_nick, config):
     run.set_property('id', [ext_config, run.domain_name, run.problem_name])
 
 
-def _require_checkout(exp, part):
-    exp.add_resource(part.shell_name, part.binary, part.rel_dest)
+class DownwardExperiment(experiments.Experiment):
+    def __init__(self, combinations, parser=None):
+        self.combinations = combinations
+        parser = parser or experiments.ExpArgParser()
+        parser.add_argument('-p', '--preprocess', action='store_true',
+                            help='build preprocessing experiment')
+        parser.add_argument('--complete', action='store_true',
+                            help='build complete experiment (overrides -p)')
+        parser.add_argument('-s', '--suite', default=[], type=tools.csv,
+                            required=True, help=downward_suites.HELP)
+        parser.add_argument('-c', '--configs', default=[], type=tools.csv,
+                            required=False, help=downward_configs.HELP)
 
+        experiments.Experiment.__init__(self, parser)
 
-def _prepare_preprocess_exp(exp, translator, preprocessor):
-    # Copy the whole translate directory
-    exp.add_resource(translator.shell_name + '_DIR', translator.exe_dir,
-                     translator.rel_dest)
-    # In order to set an environment variable, overwrite the executable
-    exp.add_resource(translator.shell_name,
-                     os.path.join(translator.exe_dir, 'translate.py'),
-                     os.path.join(translator.rel_dest, 'translate.py'))
-    _require_checkout(exp, preprocessor)
+        config_needed = self.complete or not self.preprocess
+        if config_needed and not self.configs:
+            logging.error('Please specify at least one planner configuration')
+            sys.exit(2)
 
+        checkouts.make_checkouts(combinations)
+        #require_src_dirs(self, combinations)
+        self.problems = downward_suites.build_suite(self.suite)
 
-def _prepare_search_exp(exp, translator, preprocessor, planner):
-    _require_checkout(exp, planner)
-    for bin in ['downward-1', 'downward-2', 'downward-4', 'dispatch',
-                'downward-seq-opt-fdss-1.py', 'unitcost']:
-        src_path = os.path.join(planner.exe_dir, bin)
-        if not os.path.isfile(src_path):
-            continue
-        code_subdir = os.path.dirname(planner.rel_dest)
-        exp.add_resource('UNUSEDNAME', src_path,
-                        os.path.join(code_subdir, bin))
-    validate = os.path.join(planner.exe_dir, '..', 'validate')
-    if os.path.exists(validate):
-        exp.add_resource('VALIDATE', validate, 'validate')
+        self.prepare()
+        self.make_runs()
 
+    def _require_checkout(self, part):
+        self.add_resource(part.shell_name, part.binary, part.rel_dest)
 
-def build_preprocess_exp(combinations, parser=experiments.ExpArgParser()):
-    """
-    When the option --preprocess is passed on the commandline this method
-    is invoked an creates a preprocessing experiment.
+    def prepare(self):
+        if self.preprocess:
+            self._prepare_preprocess()
 
-    When the resultfetcher is run the following directory structure is created:
+    def _prepare_preprocess(self):
+        """
+        When the option --preprocess is passed on the commandline this method
+        is invoked and it creates a preprocessing experiment.
 
-    SCRIPTS_DIR
-        - preprocessed-tasks
-            - TRANSLATOR_REV-PREPROCESSOR_REV
-                - DOMAIN
-                    - PROBLEM
-                        - output
-    """
-    exp = experiments.build_experiment(parser)
+        When the resultfetcher is run the following directory structure is created:
 
-    # Use unique name for the preprocess experiment
-    if not exp.name.endswith('-p'):
-        exp.name += '-p'
-        logging.info('Experiment name set to %s' % exp.name)
+        SCRIPTS_DIR
+            - preprocessed-tasks
+                - TRANSLATOR_REV-PREPROCESSOR_REV
+                    - DOMAIN
+                        - PROBLEM
+                            - output
+        """
+        # Use unique name for the preprocess experiment
+        if not self.name.endswith('-p'):
+            self.name += '-p'
+            logging.info('Experiment name set to %s' % self.name)
 
-    # Use unique dir for the preprocess experiment
-    if not exp.base_dir.endswith('-p'):
-        exp.base_dir += '-p'
-        logging.info('Experiment directory set to %s' % exp.base_dir)
+        # Use unique dir for the preprocess experiment
+        if not self.base_dir.endswith('-p'):
+            self.base_dir += '-p'
+            logging.info('Experiment directory set to %s' % self.base_dir)
 
-    # Add some instructions
-    if type(exp) == experiments.LocalExperiment:
-        exp.end_instructions = ('Preprocess experiment has been created. '
-            'Before you can create the search experiment you have to run\n'
-            './%(exp_name)s/run\n'
-            './resultfetcher.py %(exp_name)s' % {'exp_name': exp.name})
-    elif type(exp) == experiments.GkiGridExperiment:
-        exp.end_instructions = ('You can submit the preprocessing '
-            'experiment to the queue now by calling '
-            '"qsub ./%(name)s/%(filename)s"' % exp.__dict__)
+        # Add some instructions
+        if self.environment == environments.LocalEnvironment:
+            self.end_instructions = ('Preprocess experiment has been created. '
+                'Before you can create the search experiment you have to run\n'
+                './%(exp_name)s/run\n'
+                './resultfetcher.py %(exp_name)s' % {'exp_name': self.name})
+        elif self.environment == environments.GkiGridEnvironment:
+            exp.end_instructions = ('You can submit the preprocessing '
+                'experiment to the queue now by calling '
+                '"qsub ./%(name)s/%(filename)s"' % self.__dict__)
 
-    # Set the eval directory already here, we don't want the results to land
-    # in the default testname-eval
-    exp.set_property('eval_dir', os.path.relpath(PREPROCESSED_TASKS_DIR))
+        # Set the eval directory already here, we don't want the results to land
+        # in the default testname-eval
+        self.set_property('eval_dir', os.path.relpath(PREPROCESSED_TASKS_DIR))
 
-    # We need the "output" file, not only the properties file
-    exp.set_property('copy_all', True)
+        # We need the "output" file, not only the properties file
+        self.set_property('copy_all', True)
 
-    checkouts.make_checkouts(combinations)
+    def _prepare_translator_and_preprocessor(self, translator, preprocessor):
+        # Copy the whole translate directory
+        self.add_resource(translator.shell_name + '_DIR', translator.exe_dir,
+                         translator.rel_dest)
+        # In order to set an environment variable, overwrite the executable
+        self.add_resource(translator.shell_name,
+                         os.path.join(translator.exe_dir, 'translate.py'),
+                         os.path.join(translator.rel_dest, 'translate.py'))
+        self._require_checkout(preprocessor)
 
-    problems = downward_suites.build_suite(exp.suite)
+    def _prepare_planner(self, planner):
+        self._require_checkout(planner)
+        for bin in ['downward-1', 'downward-2', 'downward-4', 'dispatch',
+                    'downward-seq-opt-fdss-1.py', 'unitcost']:
+            src_path = os.path.join(planner.exe_dir, bin)
+            if not os.path.isfile(src_path):
+                continue
+            code_subdir = os.path.dirname(planner.rel_dest)
+            self.add_resource('UNUSEDNAME', src_path,
+                            os.path.join(code_subdir, bin))
+        validate = os.path.join(planner.exe_dir, '..', 'validate')
+        if os.path.exists(validate):
+            self.add_resource('VALIDATE', validate, 'validate')
 
-    for combo in combinations:
-        translator, preprocessor = combo[:2]
-        if len(combo) == 3:
-            planner = combo[2]
+    def _get_configs(self, rev):
+        return _get_configs(rev, self.configs)
+
+    def make_runs(self):
+        if self.complete:
+            self._make_complete_runs()
+        elif self.preprocess:
+            self._make_preprocess_runs()
         else:
-            planner = checkouts.PlannerHgCheckout(rev='WORK')
+            self._make_search_runs()
 
-        assert translator.part == 'translate'
-        assert preprocessor.part == 'preprocess'
-        assert planner.part == 'search'
+    def _make_preprocess_runs(self):
+        for translator, preprocessor, planner in self.combinations:
+            self._prepare_translator_and_preprocessor(translator, preprocessor)
 
-        _prepare_preprocess_exp(exp, translator, preprocessor)
+            for prob in self.problems:
+                run = DownwardRun(self, translator, preprocessor, planner, prob)
+                _prepare_preprocess_run(self, run)
+                self.add_run(run)
 
-        for problem in problems:
-            run = DownwardRun(exp, translator, preprocessor, planner, problem)
-            _prepare_preprocess_run(exp, run)
-            exp.add_run(run)
-    exp.build()
+    def _make_search_runs(self):
+        for translator, preprocessor, planner in self.combinations:
+            self._prepare_planner(planner)
 
+            for config_nick, config in self._get_configs(planner.rev):
+                for prob in self.problems:
+                    run = DownwardRun(self, translator, preprocessor, planner, prob)
+                    _prepare_search_run(self, run, config_nick, config)
+                    self.add_run(run)
 
-def build_search_exp(combinations, parser=experiments.ExpArgParser()):
-    """
-    combinations can either be a list of PlannerCheckouts or a list of tuples
-    (translator, preprocessor, planner)
-
-    In the first case we fill the list with Translate and Preprocessor
-    "Checkouts" that use the working copy code
-    """
-    exp = experiments.build_experiment(parser)
-    checkouts.make_checkouts(combinations)
-    problems = downward_suites.build_suite(exp.suite)
-
-    experiment_combos = []
-
-    for combo in combinations:
-
-        if isinstance(combo, checkouts.Checkout):
-            planner = combo
-            translator = checkouts.TranslatorHgCheckout(rev='WORK')
-            preprocessor = checkouts.PreprocessorHgCheckout(rev='WORK')
-        else:
-            translator, preprocessor, planner = combo
-
-        assert translator.part == 'translate'
-        assert preprocessor.part == 'preprocess'
-        assert planner.part == 'search'
-
-        experiment_combos.append((translator, preprocessor, planner))
-
-    for translator, preprocessor, planner in experiment_combos:
-        _prepare_search_exp(exp, translator, preprocessor, planner)
-
-        configs = _get_configs(planner.rev, exp.configs)
-
-        for config_nick, config in configs:
-            for problem in problems:
-                run = DownwardRun(exp, translator, preprocessor, planner,
-                                  problem)
-                _prepare_search_run(exp, run, config_nick, config)
-                exp.add_run(run)
-
-                preprocess_dir = os.path.join(PREPROCESSED_TASKS_DIR,
+                    preprocess_dir = os.path.join(PREPROCESSED_TASKS_DIR,
                                     translator.rev + '-' + preprocessor.rev,
-                                    problem.domain, problem.problem)
+                                    prob.domain, prob.problem)
 
-                def path(filename):
-                    return os.path.join(preprocess_dir, filename)
+                    def path(filename):
+                        return os.path.join(preprocess_dir, filename)
 
-                # Add the preprocess files for later parsing
-                run.add_resource('OUTPUT', path('output'), 'output',
-                                 required=False)
-                run.add_resource('TEST_GROUPS', path('test.groups'),
-                                 'test.groups', required=False)
-                run.add_resource('ALL_GROUPS', path('all.groups'),
-                                 'all.groups', required=False)
-                run.add_resource('OUTPUT_SAS', path('output.sas'),
-                                 'output.sas', required=False)
-                run.add_resource('RUN_LOG', path('run.log'), 'run.log')
-                run.add_resource('RUN_ERR', path('run.err'), 'run.err')
-                run.add_resource('DOMAIN', path('domain.pddl'), 'domain.pddl')
-                run.add_resource('PROBLEM', path('problem.pddl'),
-                                 'problem.pddl')
-    exp.build()
+                    # Add the preprocess files for later parsing
+                    run.add_resource('OUTPUT', path('output'), 'output',
+                                     required=False)
+                    run.add_resource('TEST_GROUPS', path('test.groups'),
+                                     'test.groups', required=False)
+                    run.add_resource('ALL_GROUPS', path('all.groups'),
+                                     'all.groups', required=False)
+                    run.add_resource('OUTPUT_SAS', path('output.sas'),
+                                     'output.sas', required=False)
+                    run.add_resource('RUN_LOG', path('run.log'), 'run.log')
+                    run.add_resource('RUN_ERR', path('run.err'), 'run.err')
+                    run.add_resource('DOMAIN', path('domain.pddl'),
+                                     'domain.pddl')
+                    run.add_resource('PROBLEM', path('problem.pddl'),
+                                     'problem.pddl')
 
+    def _make_complete_runs(self):
+        for translator, preprocessor, planner in self.combinations:
+            self._prepare_translator_and_preprocessor(translator, preprocessor)
+            self._prepare_planner(planner)
 
-def build_complete_experiment(combinations, parser=experiments.ExpArgParser()):
-    exp = experiments.build_experiment(parser)
-    checkouts.make_checkouts(combinations)
-    require_src_dirs(exp, combinations)
-    problems = downward_suites.build_suite(exp.suite)
-
-    for translator, preprocessor, planner in combinations:
-        _prepare_preprocess_exp(exp, translator, preprocessor)
-        _prepare_search_exp(exp, translator, preprocessor, planner)
-
-        configs = _get_configs(planner.rev, exp.configs)
-
-        for config_nick, config in configs:
-            for problem in problems:
-                run = DownwardRun(exp, translator, preprocessor, planner,
-                                  problem)
-                _prepare_preprocess_run(exp, run)
-                _prepare_search_run(exp, run, config_nick, config)
-                exp.add_run(run)
-    exp.build()
-    return exp
+            for config_nick, config in self._get_configs(planner.rev):
+                for prob in self.problems:
+                    run = DownwardRun(self, translator, preprocessor, planner, prob)
+                    _prepare_preprocess_run(self, run)
+                    _prepare_search_run(self, run, config_nick, config)
+                    self.add_run(run)
 
 
 def build_experiment(combinations):
-    exp_type_parser = tools.ArgParser(add_help=False, add_log_option=False)
-    exp_type_parser.add_argument('-p', '--preprocess', action='store_true',
-                        default=False, help='build preprocessing experiment')
-    exp_type_parser.add_argument('--complete', action='store_true',
-                        default=False,
-                        help='build complete experiment (overrides -p)')
+    for translator, preprocessor, planner in combinations:
+        assert translator.part == 'translate'
+        assert preprocessor.part == 'preprocess'
+        assert planner.part == 'search'
 
-    known_args, remaining_args = exp_type_parser.parse_known_args()
-    # delete parsed args
-    sys.argv = [sys.argv[0]] + remaining_args
-
-    logging.info('Preprocess exp: %s' % known_args.preprocess)
-
-    config_needed = known_args.complete or not known_args.preprocess
-
-    parser = experiments.ExpArgParser(parents=[exp_type_parser])
-    parser.add_argument('-s', '--suite', default=[], type=tools.csv,
-                            required=True, help=downward_suites.HELP)
-    parser.add_argument('-c', '--configs', default=[], type=tools.csv,
-                            required=config_needed, help=downward_configs.HELP)
-
-    if known_args.complete:
-        build_complete_experiment(combinations, parser)
-    elif known_args.preprocess:
-        build_preprocess_exp(combinations, parser)
-    else:
-        build_search_exp(combinations, parser)
+    exp = DownwardExperiment(combinations)
+    exp.build()
 
 
 if __name__ == '__main__':
