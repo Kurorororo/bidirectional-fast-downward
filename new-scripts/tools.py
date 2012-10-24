@@ -191,16 +191,20 @@ def import_python_file(filename):
         sys.exit(1)
 
 
-def run_command(cmd, env=None):
+def run_command(cmd, **kwargs):
     """
     Runs command cmd and returns the output
     """
-    logging.info('Running command "%s"' % cmd)
-    if type(cmd) == str:
-        cmd = cmd.split()
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, env=env)
-    output = p.communicate()[0].strip()
-    return output
+    assert type(cmd) is list
+    logging.info('Running command: %s' % ' '.join(cmd))
+    return subprocess.call(cmd, **kwargs)
+
+def get_command_output(cmd, **kwargs):
+    assert type(cmd) is list
+    logging.info('Running command: %s' % ' '.join(cmd))
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, **kwargs)
+    stdout, _ = p.communicate()
+    return stdout.strip()
 
 
 class Properties(ConfigObj):
