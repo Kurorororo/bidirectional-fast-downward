@@ -29,6 +29,7 @@ Abstraction::Abstraction()
       queue(new AdaptiveQueue<AbstractState *>()),
       pick(RANDOM),
       rng(2012),
+      needed_operator_costs(),
       num_states(1),
       deviations(0),
       unmet_preconditions(0),
@@ -42,6 +43,8 @@ Abstraction::Abstraction()
       use_astar(true),
       log_h(false),
       memory_released(false) {
+    assert(!g_goal.empty());
+
     assert(!g_memory_buffer);
     g_memory_buffer = new char [10 * 1024 * 1024];
 
@@ -112,9 +115,6 @@ void Abstraction::build(int h_updates) {
     cout << "Abstract states offline: " << num_states_offline << endl;
     cout << "Cost updates: " << updates << "/" << h_updates << endl;
     update_h_values();
-    print_statistics();
-    if (max_states_online <= 0)
-        release_memory();
 }
 
 void Abstraction::break_solution(AbstractState *state, const Splits &splits) {
@@ -260,7 +260,7 @@ bool Abstraction::astar_search(bool forward, bool use_h) const {
         if (new_f < old_f) {
             continue;
         }
-        if (forward && state == goal) {
+        if (forward && use_h && state == goal) {
             extract_solution(goal);
             return true;
         }
@@ -268,6 +268,23 @@ bool Abstraction::astar_search(bool forward, bool use_h) const {
         for (Arcs::iterator it = successors.begin(); it != successors.end(); ++it) {
             Operator *op = it->first;
             AbstractState *successor = it->second;
+
+            // Special code for additive abstractions.
+            if (forward && !use_h) {
+                // We are currently collecting the needed operator costs.
+                assert(needed_operator_costs.size() == g_operators.size());
+                // cost'(op) = h(a1) - h(a2)
+                const int needed_costs = state->get_h() - successor->get_h();
+                if (needed_costs > 0) {
+                    // needed_costs is negative if we reach a2 with op and
+                    // h(a2) > h(a1). This includes the case when we reach a
+                    // dead-end node. If h(a1)==h(a2) we don't have to update
+                    // anything since we initialize the listwith zeros. This
+                    // handles moving from one dead-end node to another.
+                    const int op_index = get_op_index(op);
+                    needed_operator_costs[op_index] = max(needed_operator_costs[op_index], needed_costs);
+                }
+            }
 
             const int succ_g = g + op->get_cost();
             if (successor->get_distance() > succ_g) {
@@ -406,7 +423,7 @@ bool Abstraction::check_and_break_solution(State conc_state, AbstractState *abs_
     assert(!abs_state->get_op_out());
     assert(!abs_state->get_state_out());
 
-    if (test_goal(conc_state)) {
+    if (test_cegar_goal(conc_state)) {
         // We have reached the goal.
         return true;
     }
@@ -588,6 +605,32 @@ void Abstraction::write_dot_file(int num) {
     dotfile.close();
 }
 
+int Abstraction::get_op_index(const Operator *op) const {
+    int op_index = op - &*g_operators.begin();
+    assert(op_index >= 0 && op_index < g_operators.size());
+    return op_index;
+}
+
+void Abstraction::adapt_operator_costs() {
+    needed_operator_costs.resize(g_operators.size(), 0);
+    // Traverse abstraction and remember the minimum cost we need to keep for
+    // each operator in order not to decrease any heuristic values.
+    queue->clear();
+    reset_distances();
+    init->reset_neighbours();
+    init->set_distance(0);
+    queue->push(0, init);
+    astar_search(true, false);
+    for (int i = 0; i < needed_operator_costs.size(); ++i) {
+        if (DEBUG)
+            cout << i << " " << needed_operator_costs[i] << "/"
+                 << g_operators[i].get_cost() << " " << g_operators[i].get_name() << endl;
+        Operator &op = g_operators[i];
+        op.set_cost(op.get_cost() - needed_operator_costs[i]);
+        assert(op.get_cost() >= 0);
+    }
+}
+
 int Abstraction::get_num_states_online() const {
     assert(num_states_offline >= 1);
     return get_num_states() - num_states_offline;
@@ -651,5 +694,6 @@ void Abstraction::print_statistics() {
     cout << "Arc size: " << arc_size / 1024 << " KB" << endl;
     cout << "Init h: " << init->get_h() << endl;
     cout << "Average h: " << get_avg_h() << endl;
+    cout << "CEGAR abstractions: 1" << endl;
 }
 }

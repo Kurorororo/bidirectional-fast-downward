@@ -38,7 +38,9 @@ enum PickStrategy {
     MAX_REFINED,
     // Number of predecessors in ordering of causal graph.
     MIN_PREDECESSORS,
-    MAX_PREDECESSORS
+    MAX_PREDECESSORS,
+    // Only for cegar_sum.
+    BEST2
 };
 
 class Abstraction {
@@ -63,6 +65,9 @@ private:
     // How to pick the next split in case of multiple possibilities.
     PickStrategy pick;
     mutable RandomNumberGenerator rng;
+
+    // Members for additive abstractions.
+    mutable vector<int> needed_operator_costs;
 
     // Statistics.
     mutable int num_states;
@@ -124,9 +129,6 @@ private:
     void update_h_values() const;
     void log_h_values() const;
 
-    void print_statistics();
-    double get_avg_h() const;
-
 public:
     Abstraction();
     ~Abstraction();
@@ -149,6 +151,16 @@ public:
     // Destroy all states when termination criterion is met.
     void release_memory();
     bool has_released_memory() const {return memory_released; }
+
+    // Methods for additive abstractions.
+    int get_op_index(const Operator *op) const;
+    // For each operator op from a1 to a2, set cost'(op) = max(h(a1)-h(a2), 0).
+    // This makes the next abstraction additive to all previous ones.
+    void adapt_operator_costs();
+
+    // Statistics.
+    void print_statistics();
+    double get_avg_h() const;
 
     // Settings.
     void set_max_states_offline(int states) {max_states_offline = states; }
