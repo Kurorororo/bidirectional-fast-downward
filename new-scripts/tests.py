@@ -11,6 +11,7 @@ from tools import copy, prod
 from reports import gm
 import checkouts
 import downward_experiments
+import tools
 
 base = os.path.join('/tmp', str(datetime.datetime.now()))
 os.mkdir(base)
@@ -61,24 +62,12 @@ def test_gm1():
     for l in lists:
         assert gm_old(l) == gm(l)
 
-def make_checkouts():
-    combinations = [
-        (checkouts.Translator(),
-         checkouts.Preprocessor(rev='TIP'),
-         checkouts.Planner(rev='WORK')),
-        (checkouts.TranslatorSvn(rev='HEAD'),
-         checkouts.PreprocessorSvn(rev='head'),
-         checkouts.PlannerSvn(rev='HEAD')),
-        (checkouts.TranslatorSvn(rev=4321),
-         checkouts.Preprocessor(rev='tip'),
-         checkouts.PlannerSvn(rev='HEAD')),
-        (checkouts.Translator(rev='a640c9a9284c'),
-         checkouts.Preprocessor(rev='work'),
-         checkouts.Planner(rev='623')),
-                   ]
-    import sys
-    sys.argv += ['try', '-s', 'MINITEST', '-c', 'yY']
-    downward_experiments.build_experiment(combinations)
+
+def test_rounding():
+    assert tools.round_to_next_power_of_ten(1) == 1
+    assert tools.round_to_next_power_of_ten(2) == 10
+    assert tools.round_to_next_power_of_ten(10) == 10
+    assert tools.round_to_next_power_of_ten(11) == 100
 
 
 if __name__ == '__main__':
@@ -87,4 +76,3 @@ if __name__ == '__main__':
     test_copy_file_to_not_ex_dir()
     test_copy_dir_to_dir()
     test_gm1()
-    #make_checkouts()

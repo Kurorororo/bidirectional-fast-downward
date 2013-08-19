@@ -7,6 +7,7 @@ import traceback
 import logging
 import contextlib
 import time
+import math
 
 from external import argparse
 from external.configobj import ConfigObj
@@ -49,8 +50,6 @@ def setup_logging(level):
     root_logger.addHandler(console)
     root_logger.setLevel(level)
 
-setup_logging(logging.INFO)
-
 
 def prod(values):
     """Computes the product of a list of numbers.
@@ -65,12 +64,28 @@ def prod(values):
     return prod
 
 
+def minimum(values):
+    """Filter out None values and return the minimum.
+
+    If there are only None values, return None.
+    """
+    values = [v for v in values if v is not None]
+    if values:
+        return min(values)
+    return None
+
+
 def divide_list(seq, size):
     """
     >>> divide_list(range(10), 4)
     [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9]]
     """
     return [seq[i:i + size] for i  in range(0, len(seq), size)]
+
+
+def round_to_next_power_of_ten(i):
+    assert i > 0
+    return 10**math.ceil(math.log10(i))
 
 
 def makedirs(dir):
@@ -86,16 +101,22 @@ def makedirs(dir):
 
 def overwrite_dir(dir):
     if os.path.exists(dir):
-        if not os.path.exists(os.path.join(dir, 'run')):
-            msg = 'The directory "%s" ' % dir
-            msg += 'is not empty, do you want to overwrite it? (Y/N): '
-            answer = raw_input(msg).upper().strip()
-            if not answer == 'Y':
-                sys.exit('Aborted')
+        msg = 'The directory "%s" ' % dir
+        msg += 'is not empty, do you want to overwrite it? (Y/N): '
+        answer = raw_input(msg).upper().strip()
+        if not answer == 'Y':
+            sys.exit('Aborted')
         shutil.rmtree(dir)
     # We use the os.makedirs method instead of our own here to check if the dir
     # has really been properly deleted.
     os.makedirs(dir)
+
+
+def remove(filename):
+    try:
+        os.remove(filename)
+    except OSError:
+        pass
 
 
 def natural_sort(alist):
@@ -170,16 +191,20 @@ def import_python_file(filename):
         sys.exit(1)
 
 
-def run_command(cmd, env=None):
+def run_command(cmd, **kwargs):
     """
     Runs command cmd and returns the output
     """
-    logging.info('Running command "%s"' % cmd)
-    if type(cmd) == str:
-        cmd = cmd.split()
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, env=env)
-    output = p.communicate()[0].strip()
-    return output
+    assert type(cmd) is list
+    logging.info('Running command: %s' % ' '.join(cmd))
+    return subprocess.call(cmd, **kwargs)
+
+def get_command_output(cmd, **kwargs):
+    assert type(cmd) is list
+    logging.info('Running command: %s' % ' '.join(cmd))
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, **kwargs)
+    stdout, _ = p.communicate()
+    return stdout.strip()
 
 
 class Properties(ConfigObj):
@@ -190,7 +215,6 @@ class Properties(ConfigObj):
     def get_dataset(self):
         data = DataSet()
         for run_id, run in sorted(self.items()):
-            run['id-string'] = run_id
             data.append(**run)
         return data
 
@@ -243,17 +267,17 @@ def copy(src, dest, required=True):
     elif os.path.isdir(src):
         func = fast_updatetree
     elif required:
-        logging.error('Required path %s cannot be copied to %s' % (src, dest))
+        logging.error('Required path %s cannot be copied to %s' %
+                      (os.path.abspath(src), os.path.abspath(dest)))
         sys.exit(1)
     else:
-        msg = 'Optional path %s cannot be copied to %s'
-        logging.warning(msg % (src, dest))
+        # Do not warn if an optional file cannot be copied.
         return
     try:
         func(src, dest)
     except IOError, err:
-        logging.error('Error: The file "%s" could not be copied to "%s": %s' %
-                      (src, dest, err))
+        logging.error('The file "%s" could not be copied to "%s": %s' %
+                      (os.path.abspath(src), os.path.abspath(dest), err))
         if required:
             sys.exit(1)
 
@@ -261,6 +285,54 @@ def copy(src, dest, required=True):
 def csv(string):
     string = string.strip(', ')
     return string.split(',')
+
+
+def get_terminal_size():
+    import struct
+    try:
+        import fcntl, termios
+    except ImportError:
+        return (None, None)
+
+    try:
+        data = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, 4 * '00')
+        height, width = struct.unpack('4H',data)[:2]
+        return (height, width)
+    except Exception:
+        return (None, None)
+
+
+class RawDescriptionAndArgumentDefaultsHelpFormatter(argparse.HelpFormatter):
+    """
+    Help message formatter which retains any formatting in descriptions and adds
+    default values to argument help.
+    """
+    def __init__(self, prog, **kwargs):
+        # Use the whole terminal width
+        height, width = get_terminal_size()
+        argparse.HelpFormatter.__init__(self, prog, width=width, **kwargs)
+
+    def _fill_text(self, text, width, indent):
+        return ''.join([indent + line for line in text.splitlines(True)])
+
+    def _get_help_string(self, action):
+        help = action.help
+        if '%(default)' not in action.help and not 'default' in action.help:
+            if action.default is not argparse.SUPPRESS:
+                defaulting_nargs = [argparse.OPTIONAL, argparse.ZERO_OR_MORE]
+                if action.option_strings or action.nargs in defaulting_nargs:
+                    help += ' (default: %(default)s)'
+        return help
+
+    def _format_args(self, action, default_metavar):
+        """
+        We want to show "[environment-specific options]" instead of "...".
+        """
+        get_metavar = self._metavar_formatter(action, default_metavar)
+        if action.nargs == argparse.PARSER:
+            return '%s [environment-specific options]' % get_metavar(1)
+        else:
+            return argparse.HelpFormatter._format_args(self, action, default_metavar)
 
 
 class ArgParser(argparse.ArgumentParser):
@@ -300,32 +372,8 @@ class ArgParser(argparse.ArgumentParser):
         return string
 
 
-class RawDescriptionAndArgumentDefaultsHelpFormatter(argparse.HelpFormatter):
-    """
-    Help message formatter which retains any formatting in descriptions and adds
-    default values to argument help.
-    """
-    def _fill_text(self, text, width, indent):
-        return ''.join([indent + line for line in text.splitlines(True)])
-
-    def _get_help_string(self, action):
-        help = action.help
-        if '%(default)' not in action.help:
-            if action.default is not argparse.SUPPRESS:
-                defaulting_nargs = [argparse.OPTIONAL, argparse.ZERO_OR_MORE]
-                if action.option_strings or action.nargs in defaulting_nargs:
-                    help += ' (default: %(default)s)'
-        return help
-
-    def _format_args(self, action, default_metavar):
-        """
-        We want to show "[environment-specific options]" instead of "...".
-        """
-        get_metavar = self._metavar_formatter(action, default_metavar)
-        if action.nargs == argparse.PARSER:
-            return '%s [environment-specific options]' % get_metavar(1)
-        else:
-            return argparse.HelpFormatter._format_args(self, action, default_metavar)
+# Parse the log-level and set it
+ArgParser(add_help=False).parse_known_args()
 
 
 class Timer(object):

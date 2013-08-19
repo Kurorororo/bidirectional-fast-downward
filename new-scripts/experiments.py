@@ -19,13 +19,13 @@ EPILOG = """\
 PLEASE NOTE: The available options depend on the selected experiment type:
 
 global options:  %(exe)s --help
-special options: %(exe)s {local,gkigrid,argo} --help
+special options: %(exe)s {local,gkigrid} --help
 --------------------------------------------------------------------------------
 """ % {'exe': sys.argv[0]}
 
 ENVIRONMENTS = {'local': environments.LocalEnvironment,
                 'gkigrid': environments.GkiGridEnvironment,
-                'argo': environments.ArgoEnvironment}
+                'maia': environments.MaiaEnvironment}
 
 DEFAULT_ABORT_ON_FAILURE = True
 
@@ -40,6 +40,10 @@ class ExpArgParser(tools.ArgParser):
         self.add_argument(
             '--shard-size', type=int, default=100,
             help='how many tasks to group into one top-level directory')
+        self.add_argument('--only-main-script', action='store_true',
+            help='Only write the main experiment script to disk and exit.')
+        self.add_argument('--no-main-script', action='store_true',
+            help='Write a normal experiment, but omit the main script.')
 
 
 class Experiment(object):
@@ -121,14 +125,21 @@ class Experiment(object):
         """
         Apply all the actions to the filesystem
         """
-        tools.overwrite_dir(self.path)
-
         # Make the variables absolute
         self.env_vars = dict([(var, self._get_abs_path(path))
                               for (var, path) in self.env_vars.items()])
 
         self._set_run_dirs()
-        self._build_main_script()
+
+        if not self.no_main_script:
+            # This is the first part where we only write the main script.
+            # We only overwrite the exp dir in the first part.
+            tools.overwrite_dir(self.path)
+            self._build_main_script()
+        if self.only_main_script:
+            sys.exit()
+
+        # This is the second part where we write everything else
         self._build_resources()
         self._build_runs()
         self._build_properties_file()
@@ -171,8 +182,7 @@ class Experiment(object):
 
     def _set_run_dirs(self):
         """
-        Sets the relative run directories as instance
-        variables for all runs
+        Sets the relative run directories as instance variables for all runs
         """
         def run_number(number):
             return str(number).zfill(5)
@@ -183,12 +193,10 @@ class Experiment(object):
             return 'runs-%s-%s' % (run_number(first_run), run_number(last_run))
 
         current_run = 0
-
         shards = tools.divide_list(self.runs, self.shard_size)
 
         for shard_number, shard in enumerate(shards, start=1):
             shard_dir = os.path.join(self.path, get_shard_dir(shard_number))
-            tools.overwrite_dir(shard_dir)
 
             for run in shard:
                 current_run += 1
@@ -250,9 +258,6 @@ class Run(object):
 
         self.properties = tools.Properties()
 
-        if hasattr(experiment, 'queue'):
-            self.set_property('queue', experiment.queue)
-
     def set_property(self, name, value):
         """
         Add a key-value property to a run. These can be used later for
@@ -281,17 +286,18 @@ class Run(object):
         """
         self.linked_resources.append(resource_name)
 
-    def add_resource(self, resource_name, source, dest, required=True):
+    def add_resource(self, resource_name, source, dest, required=True,
+                     symlink=False):
         """
         Example:
         >>> run.add_resource('DOMAIN', '../benchmarks/gripper/domain.pddl',
-                                'domain.pddl')
+                             'domain.pddl')
 
         Copy "../benchmarks/gripper/domain.pddl" into the run
         directory under name "domain.pddl" and make it available as
         resource "DOMAIN" (usable as environment variable $DOMAIN).
         """
-        self.resources.append((source, dest, required))
+        self.resources.append((source, dest, required, symlink))
         self.env_vars[resource_name] = dest
 
     def add_command(self, name, command, **kwargs):
@@ -383,14 +389,14 @@ class Run(object):
 
             # Support running globally installed binaries
             def format_arg(arg):
-                if arg in self.env_vars:
-                    return arg
-                return '"%s"' % arg
+                return arg if arg in self.env_vars else '"%s"' % arg
+
+            def format_key_value_pair(key, val):
+                return '%s=%s' % (key, val if val in self.env_vars else repr(val))
 
             cmd_string = '[%s]' % ', '.join([format_arg(arg) for arg in cmd])
-            kw_pairs = [(key, repr(value)) for
-                        (key, value) in kwargs.items()]
-            kwargs_string = ', '.join('%s=%s' % pair for pair in kw_pairs)
+            kwargs_string = ', '.join(format_key_value_pair(key, value)
+                                      for key, value in kwargs.items())
             parts = [cmd_string]
             if kwargs_string:
                 parts.append(kwargs_string)
@@ -409,7 +415,7 @@ class Run(object):
             env_vars_text = ''
             for var, filename in sorted(self.env_vars.items()):
                 abs_filename = self._get_abs_path(filename)
-                rel_filename = os.path.relpath(abs_filename, self.dir)
+                rel_filename = self._get_rel_path(abs_filename)
                 env_vars_text += ('%s = "%s"\n' % (var, rel_filename))
         else:
             env_vars_text = '"Here you would find variable declarations"'
@@ -425,19 +431,7 @@ class Run(object):
         If we are building an argo experiment, add all linked resources to
         the resources list
         """
-        # Determine if we should link (gkigrid) or copy (argo)
-        if self.experiment.environment == environments.ArgoEnvironment:
-            # Copy into run dir by adding the linked resource to normal
-            # resources list
-            for resource_name in self.linked_resources:
-                source = self.experiment.env_vars.get(resource_name, None)
-                if not source:
-                    logging.error('If you require a resource you have to add '
-                                  'it to the experiment')
-                    sys.exit(1)
-                basename = os.path.basename(source)
-                dest = self._get_abs_path(basename)
-                self.resources.append((source, dest))
+        self.experiment.environment.build_linked_resources(self)
 
     def _build_resources(self):
         for name, content in self.new_files:
@@ -449,14 +443,20 @@ class Run(object):
                     # Make run script executable
                     os.chmod(filename, 0755)
 
-        for source, dest, required in self.resources:
+        for source, dest, required, symlink in self.resources:
+            if required and not os.path.exists(source):
+                logging.error('The required resource can not be found: %s' %
+                              source)
+                sys.exit(1)
             dest = self._get_abs_path(dest)
+            if symlink:
+                source = self._get_rel_path(source)
+                os.symlink(source, dest)
+                logging.debug('Linking from %s to %s' % (source, dest))
+                continue
+
             logging.debug('Copying %s to %s' % (source, dest))
-            try:
-                tools.copy(source, dest, required)
-            except IOError, err:
-                msg = 'Error: The file "%s" could not be copied to "%s": %s'
-                logging.error(msg % (source, dest, err))
+            tools.copy(source, dest, required)
 
     def _build_properties_file(self):
         # Check correctness of id property
@@ -479,6 +479,9 @@ class Run(object):
         /home/user/mytestjob/runs-00001-00100/run
         """
         return os.path.join(self.dir, rel_path)
+
+    def _get_rel_path(self, abs_path):
+        return os.path.relpath(abs_path, start=self.dir)
 
 
 if __name__ == '__main__':

@@ -25,22 +25,47 @@ class FetchOptionParser(tools.ArgParser):
     def __init__(self, *args, **kwargs):
         tools.ArgParser.__init__(self, *args, **kwargs)
 
-        self.add_argument('exp_dir',
-                help='path to experiment directory', type=self.directory)
+        self.add_argument('exp_dir', nargs='?',
+                help='Path to experiment directory', type=self.directory)
 
         self.add_argument('-d', '--dest', dest='eval_dir', default='',
-                help='path to evaluation directory (default: <exp_dir>-eval)')
+                help='Path to evaluation directory (default: <exp_dir>-eval)')
 
         self.add_argument('--copy-all', action='store_true',
-                help='copy all files from run dirs to new directory tree, '
-                    'not only the properties files')
+                help='Copy all files from run dirs to a new directory tree. '
+                     'Without this option only the combined properties file '
+                     'is written do disk.')
+
+        self.add_argument('--no-props-file', action='store_true',
+                help='Do not write the combined properties file.')
 
     def parse_args(self, *args, **kwargs):
         # args is the populated namespace, i.e. the Fetcher instance
         args = tools.ArgParser.parse_args(self, *args, **kwargs)
 
+        if args.exp_dir:
+            self.handle_exp_dir(args)
+        else:
+            args.exp_dir = ''
+            args.exp_props = {}
+
+        if not args.exp_dir and not args.eval_dir:
+            logging.error('If the experiment directory is not given, you '
+                          'have to specify the evaluation directory.')
+            sys.exit(1)
+
+        if args.eval_dir:
+            args.eval_dir = os.path.abspath(args.eval_dir)
+        else:
+            args.eval_dir = args.exp_dir + '-eval'
+
+        logging.info('Eval dir: "%s"' % args.eval_dir)
+
+        return args
+
+    def handle_exp_dir(self, args):
         args.exp_dir = os.path.abspath(args.exp_dir)
-        logging.info('Exp dir:  "%s"' % args.exp_dir)
+        logging.info('Exp dir:  %s' % args.exp_dir)
 
         if args.exp_dir.endswith('eval'):
             msg = ('The source directory seems to be an evaluation directory. '
@@ -57,16 +82,8 @@ class FetchOptionParser(tools.ArgParser):
             args.eval_dir = args.exp_props['eval_dir']
         if 'copy_all' in args.exp_props:
             args.copy_all = args.exp_props['copy_all']
-
-        # If args.eval_dir is absolute already we don't have to do anything
-        if args.eval_dir and not os.path.isabs(args.eval_dir):
-            args.eval_dir = os.path.abspath(args.eval_dir)
-        elif not args.eval_dir:
-            args.eval_dir = args.eval_dir or args.exp_dir + '-eval'
-
-        logging.info('Eval dir: "%s"' % args.eval_dir)
-
-        return args
+        if 'no_props_file' in args.exp_props:
+            args.no_props_file = args.exp_props['no_props_file']
 
 
 class _MultiPattern(object):
@@ -132,8 +149,10 @@ class _FileParser(object):
             with open(filename, 'rb') as file:
                 self.content = file.read()
         except IOError, err:
-            logging.error('File "%s" could not be read (%s)' % (filename, err))
             self.content = ''
+            return False
+        else:
+            return True
 
     def add_pattern(self, pattern):
         self.patterns.append(pattern)
@@ -171,6 +190,7 @@ class Fetcher(object):
 
         self.file_parsers = defaultdict(_FileParser)
         self.check = None
+        self.postprocess_functions = []
 
     def add_pattern(self, name, regex, group=1, file='run.log', required=True,
                     type=int, flags=''):
@@ -219,63 +239,81 @@ class Fetcher(object):
         """
         self.check = function
 
+    def apply_postprocess_functions(self, combined_props):
+        if not self.postprocess_functions:
+            return
+
+        prob_to_runs = defaultdict(list)
+        for run_name, run in combined_props.items():
+            prob = '%s:%s' % (run['domain'], run['problem'])
+            prob_to_runs[prob].append(run)
+
+        for func in self.postprocess_functions:
+            for prob, problem_runs in prob_to_runs.items():
+                func(problem_runs)
+
+    def fetch_dir(self, run_dir):
+        prop_file = os.path.join(run_dir, 'properties')
+        props = tools.Properties(prop_file)
+
+        id = props.get('id')
+        # Abort if an id cannot be read.
+        if not id:
+            logging.error('id is not set in %s.' % prop_file)
+            sys.exit(1)
+
+        dest_dir = os.path.join(self.eval_dir, *id)
+        if self.copy_all:
+            tools.makedirs(dest_dir)
+            tools.fast_updatetree(run_dir, dest_dir)
+
+        props['run_dir'] = os.path.relpath(run_dir, self.exp_dir)
+
+        for filename, file_parser in self.file_parsers.items():
+            # If filename is absolute it will not be changed here
+            path = os.path.join(run_dir, filename)
+            success = file_parser.load_file(path)
+            if success:
+                # Subclasses directly modify the properties during parsing
+                file_parser.parse(props)
+            else:
+                logging.error('File "%s" could not be read' % path)
+
+        if self.copy_all:
+            # Write new properties file
+            props.filename = os.path.join(dest_dir, 'properties')
+            props.write()
+
+        if self.check:
+            try:
+                self.check(props)
+            except AssertionError, e:
+                msg = 'Parsed properties not valid in %s: %s'
+                logging.error(msg % (prop_file, e))
+                print '*' * 60
+                props.write(sys.stdout)
+                print '*' * 60
+        return '-'.join(id), props
+
     def fetch(self):
         total_dirs = self.exp_props.get('runs')
 
-        # Only write the combined properties when we are not copying preprocess
-        # files.
-        write_combined_props = not self.exp_props.get('stage') == 'preprocess'
-
-        if write_combined_props:
+        if not self.no_props_file:
             combined_props_filename = os.path.join(self.eval_dir, 'properties')
             combined_props = tools.Properties(combined_props_filename)
 
         # Get all run_dirs
         run_dirs = sorted(glob(os.path.join(self.exp_dir, 'runs-*-*', '*')))
         for index, run_dir in enumerate(run_dirs, 1):
-            prop_file = os.path.join(run_dir, 'properties')
-            props = tools.Properties(prop_file)
-
-            id = props.get('id')
-            # Abort if an id cannot be read.
-            if not id:
-                logging.error('id is not set in %s.' % prop_file)
-                sys.exit(1)
-
-            dest_dir = os.path.join(self.eval_dir, *id)
-            if self.copy_all:
-                tools.makedirs(dest_dir)
-                tools.fast_updatetree(run_dir, dest_dir)
-
-            props['run_dir'] = os.path.relpath(run_dir, self.exp_dir)
-
-            for filename, file_parser in self.file_parsers.items():
-                # If filename is absolute it will not be changed here
-                filename = os.path.join(run_dir, filename)
-                file_parser.load_file(filename)
-                # Subclasses directly modify the properties during parsing
-                file_parser.parse(props)
-
-            if write_combined_props:
-                combined_props['-'.join(id)] = props.dict()
-            if self.copy_all:
-                # Write new properties file
-                props.filename = os.path.join(dest_dir, 'properties')
-                props.write()
-
-            if self.check:
-                try:
-                    self.check(props)
-                except AssertionError, e:
-                    msg = 'Parsed properties not valid in %s: %s'
-                    logging.error(msg % (prop_file, e))
-                    print '*' * 60
-                    props.write(sys.stdout)
-                    print '*' * 60
-            logging.info('Done Evaluating: %6d/%d' % (index, total_dirs))
+            logging.info('Evaluating: %6d/%d' % (index, total_dirs))
+            id_string, props = self.fetch_dir(run_dir)
+            if not self.no_props_file:
+                props['id-string'] = id_string
+                combined_props[id_string] = props.dict()
 
         tools.makedirs(self.eval_dir)
-        if write_combined_props:
+        if not self.no_props_file:
+            self.apply_postprocess_functions(combined_props)
             combined_props.write()
             self.write_data_dump(combined_props)
 
