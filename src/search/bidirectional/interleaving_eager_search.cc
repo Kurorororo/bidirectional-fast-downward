@@ -210,8 +210,11 @@ SearchStatus InterleavingEagerSearch::step() {
   }
 
   GlobalState s = node->get_state();
-  if (current_direction == Direction::FORWARD && check_goal_and_set_plan(s))
+  if (current_direction == Direction::FORWARD && check_goal_and_set_plan(s)) {
+    cout << "#forward actions: " << get_plan().size() << endl;
+    cout << "#backward actions: " << 0 << endl;
     return SOLVED;
+  }
 
   vector<OperatorID> applicable_ops;
 
