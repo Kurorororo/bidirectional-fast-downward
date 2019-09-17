@@ -62,21 +62,23 @@ const GlobalState &StateRegistry::get_initial_state() {
 }
 
 const GlobalState &StateRegistry::create_goal_state(const State &state) {
-  if (cached_goal_state == 0) {
-    PackedStateBin *buffer = new PackedStateBin[get_bins_per_state()];
-    // Avoid garbage values in half-full bins.
-    fill_n(buffer, get_bins_per_state(), 0);
+  PackedStateBin *buffer = new PackedStateBin[get_bins_per_state()];
+  // Avoid garbage values in half-full bins.
+  fill_n(buffer, get_bins_per_state(), 0);
 
-    for (size_t i = 0; i < state.size(); ++i) {
-      state_packer.set(buffer, i, state[i].get_value());
-    }
-    state_data_pool.push_back(buffer);
-    // buffer is copied by push_back
-    delete[] buffer;
-    StateID id = insert_id_or_pop_state();
-
-    cached_goal_state = new GlobalState(lookup_state(id));
+  for (size_t i = 0; i < state.size(); ++i) {
+    state_packer.set(buffer, i, state[i].get_value());
   }
+  state_data_pool.push_back(buffer);
+  // buffer is copied by push_back
+  delete[] buffer;
+
+  StateID id = insert_id_or_pop_state();
+
+  if (cached_goal_state != 0) delete cached_goal_state;
+
+  cached_goal_state = new GlobalState(lookup_state(id));
+
   return *cached_goal_state;
 }
 

@@ -164,20 +164,6 @@ void InverseTask::propagate_mutex(const FactPair &fact,
 }
 
 void InverseTask::init_mutex() {
-  ranges.resize(get_num_variables());
-
-  for (int var = 0, n = ranges.size(); var < n; ++var)
-    for (int val = 0, m = get_variable_domain_size(var); val < m; ++val)
-      ranges[var].push_back(val);
-
-  for (int i = 0; i < parent->get_num_goals(); ++i) {
-    FactPair fact1 = parent->get_goal_fact(i);
-    ranges[fact1.var].clear();
-  }
-
-  for (int i = 0; i < get_num_variables(); ++i)
-    if (!ranges[i].empty()) to_be_filled.push_back(i);
-
   fact_to_mutexes.resize(get_num_variables(), vector<vector<FactPair>>());
 
   for (int var1 = 0; var1 < get_num_variables(); ++var1)
@@ -201,6 +187,20 @@ void InverseTask::init_mutex() {
       }
     }
   }
+}
+
+void InverseTask::init_ranges() {
+  ranges = vector<vector<int>>(get_num_variables(), vector<int>());
+
+  for (int var = 0, n = ranges.size(); var < n; ++var)
+    for (int val = 0, m = get_variable_domain_size(var); val < m; ++val)
+      ranges[var].push_back(val);
+
+  for (int i = 0; i < parent->get_num_goals(); ++i) {
+    FactPair fact1 = parent->get_goal_fact(i);
+    ranges[fact1.var].clear();
+    ranges[fact1.var].push_back(fact1.value);
+  }
 
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     FactPair fact1 = parent->get_goal_fact(i);
@@ -209,10 +209,8 @@ void InverseTask::init_mutex() {
 }
 
 bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
-                                        int var_index, vector<int> &values) {
-  if (var_index == static_cast<int>(to_be_filled.size())) return true;
-
-  int var = to_be_filled[var_index];
+                                        int var, vector<int> &values) {
+  if (var == get_num_variables()) return true;
 
   if (ranges[var].empty()) return false;
 
@@ -232,17 +230,12 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
 }
 
 void InverseTask::set_initial_state() {
-  cout << "generating an inverse initial state (a goal state)" << endl;
+  // cout << "generating an inverse initial state (a goal state)" << endl;
 
   if (parent->get_num_goals() == static_cast<int>(initial_state_values.size()))
     return;
 
-  std::vector<int> values(initial_state_values.size(), -1);
-
-  for (int i = 0; i < parent->get_num_goals(); ++i) {
-    auto fact = parent->get_goal_fact(i);
-    values[fact.var] = fact.value;
-  }
+  init_ranges();
 
   bool success = informed_backtracking(ranges, 0, initial_state_values);
   assert(success);
@@ -265,7 +258,7 @@ InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent)
 
   auto parent_initial_state_values = parent->get_initial_state_values();
 
-  for (int i = 0; i < parent->get_num_goals(); ++i)
+  for (int i = 0; i < parent->get_num_variables(); ++i)
     goals.push_back(FactPair(i, parent_initial_state_values[i]));
 
   reverse_operators();

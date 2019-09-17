@@ -87,17 +87,19 @@ void InterleavingEagerSearch::initialize() {
   }
   directions[initial_state] = Direction::FORWARD;
 
-  const State &goal_state = inverse_task_proxy.get_initial_state();
+  State goal_state = inverse_task_proxy.get_initial_state();
   std::vector<OperatorID> applicable_ops;
 
   while (true) {
     inverse_successor_generator.generate_applicable_ops(goal_state,
                                                         applicable_ops);
 
-    if (applicable_ops.empty())
+    if (applicable_ops.empty()) {
       inverse_task->set_initial_state();
-    else
+      goal_state = inverse_task_proxy.get_initial_state();
+    } else {
       break;
+    }
   }
 
   GlobalState global_goal_state = state_registry.create_goal_state(goal_state);
@@ -106,7 +108,9 @@ void InterleavingEagerSearch::initialize() {
     EvaluationContext eval_context_b(global_goal_state, 0, true, &statistics);
 
     if (open_lists[Direction::BACKWARD]->is_dead_end(eval_context_b)) {
-      cout << "Goal state is a dead end." << endl;
+      // cout << "Goal state is a dead end." << endl;
+      inverse_task->set_initial_state();
+      goal_state = inverse_task_proxy.get_initial_state();
       global_goal_state = state_registry.create_goal_state(goal_state);
     } else {
       break;
@@ -130,7 +134,6 @@ void InterleavingEagerSearch::initialize() {
     cout << "Initial state is a dead end." << endl;
   } else {
     if (search_progress.check_progress(eval_context_f)) {
-      cout << "<forward>" << endl;
       statistics.print_checkpoint_line(0);
     }
     start_f_value_statistics(Direction::FORWARD, eval_context_f);
@@ -146,7 +149,6 @@ void InterleavingEagerSearch::initialize() {
   statistics.inc_evaluated_states();
 
   if (search_progress.check_progress(eval_context_b)) {
-    cout << "<backward>" << endl;
     statistics.print_checkpoint_line(0);
   }
   start_f_value_statistics(Direction::BACKWARD, eval_context_b);
@@ -156,9 +158,7 @@ void InterleavingEagerSearch::initialize() {
   open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                           global_goal_state.get_id());
 
-  cout << "<forward>" << endl;
   print_initial_evaluator_values(eval_context_f);
-  cout << "<backward>" << endl;
   print_initial_evaluator_values(eval_context_b);
 
   pruning_methods[Direction::FORWARD]->initialize(task);
@@ -281,11 +281,6 @@ SearchStatus InterleavingEagerSearch::step() {
       open_lists[current_direction]->insert(succ_eval_context,
                                             succ_state.get_id());
       if (search_progress.check_progress(succ_eval_context)) {
-        if (current_direction == Direction::FORWARD)
-          cout << "<forward>" << endl;
-        else
-          cout << "<backward>" << endl;
-
         statistics.print_checkpoint_line(succ_node.get_g());
         reward_progress(current_direction);
       }

@@ -16,23 +16,25 @@ BidirectionalSearch::BidirectionalSearch(const Options &opts)
     : SearchEngine(opts),
       inverse_task(tasks::InverseTask::get_inverse_task()),
       inverse_task_proxy(*inverse_task),
-      inverse_successor_generator(get_successor_generator(inverse_task_proxy)) {
-}
+      inverse_successor_generator(get_successor_generator(inverse_task_proxy)),
+      directions(Direction::NONE) {}
 
 bool BidirectionalSearch::check_meeting_and_set_plan(
     BidirectionalSearch::Direction d, const GlobalState &parent,
     OperatorID op_id, const GlobalState &state) {
   SearchNode node = search_space.get_node(state);
 
-  if (!node.is_new() && directions[state] != d) {
+  if (!node.is_new() && directions[state] != Direction::NONE &&
+      directions[state] != d) {
     cout << "Solution found!" << endl;
+
     Plan plan1;
     search_space.trace_path(state, plan1);
     Plan plan2;
     search_space.trace_path(parent, plan2);
 
     if (d == Direction::FORWARD) {
-      cout << "#forward actions: " << plan2.size() << endl;
+      cout << "#forward actions: " << plan2.size() + 1 << endl;
       cout << "#backward actions: " << plan1.size() << endl;
       reverse(plan1.begin(), plan1.end());
       plan2.push_back(op_id);
@@ -40,7 +42,7 @@ bool BidirectionalSearch::check_meeting_and_set_plan(
       set_plan(plan2);
     } else {
       cout << "#forward actions: " << plan1.size() << endl;
-      cout << "#backward actions: " << plan2.size() << endl;
+      cout << "#backward actions: " << plan2.size() + 1 << endl;
       reverse(plan2.begin(), plan2.end());
       plan1.push_back(op_id);
       plan1.insert(plan1.end(), plan2.begin(), plan2.end());

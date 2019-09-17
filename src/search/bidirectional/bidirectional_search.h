@@ -14,7 +14,7 @@
 namespace bidirectional_search {
 class BidirectionalSearch : public SearchEngine {
  protected:
-  enum Direction { FORWARD = 0, BACKWARD = 1 };
+  enum Direction { NONE = 0, FORWARD = 1, BACKWARD = 2 };
   const std::shared_ptr<AbstractTask> inverse_task;
   TaskProxy inverse_task_proxy;
   const successor_generator::SuccessorGenerator &inverse_successor_generator;
