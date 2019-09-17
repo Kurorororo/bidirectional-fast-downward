@@ -17,15 +17,15 @@ class BidirectionalSearch : public SearchEngine {
   enum Direction { FORWARD = 0, BACKWARD = 1 };
   const std::shared_ptr<AbstractTask> inverse_task;
   TaskProxy inverse_task_proxy;
-  const successor_generator::SuccessorGenerator &inverse_succssor_generator;
+  const successor_generator::SuccessorGenerator &inverse_successor_generator;
   PerStateInformation<Direction> directions;
 
   bool check_meeting_and_set_plan(Direction d, const GlobalState &parent,
-                                  const GlobalState &state);
+                                  OperatorID op_id, const GlobalState &state);
 
  public:
   BidirectionalSearch(const options::Options &opts);
-  virtual ~BidirectionalSearch();
+  virtual ~BidirectionalSearch() = default;
 };
 }  // namespace bidirectional_search
 

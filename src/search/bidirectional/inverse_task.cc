@@ -6,6 +6,7 @@
 #include "../utils/system.h"
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <utility>
 
@@ -13,9 +14,9 @@ using namespace std;
 
 namespace tasks {
 
-shared_ptr<AbstractTask> g_inverse_task = nullptr;
-
 void InverseTask::reverse_operators() {
+  cout << "inversing operators" << endl;
+
   if (parent->get_num_axioms() > 0)
     throw runtime_error("Axiom is not supported.");
 
@@ -231,6 +232,8 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
 }
 
 void InverseTask::set_initial_state() {
+  cout << "generating an inverse initial state (a goal state)" << endl;
+
   if (parent->get_num_goals() == static_cast<int>(initial_state_values.size()))
     return;
 
@@ -366,4 +369,12 @@ void InverseTask::convert_state_values(
   convert_state_values_from_parent(values);
 }
 
+static shared_ptr<AbstractTask> _parse(OptionParser &parser) {
+  if (parser.dry_run())
+    return nullptr;
+  else
+    return InverseTask::get_inverse_task();
+}
+
+static Plugin<AbstractTask> _plugin("inverse", _parse);
 }  // namespace tasks

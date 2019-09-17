@@ -755,6 +755,18 @@ fast_downward_plugin(
     DEPENDENCY_ONLY
 )
 
+fast_downward_plugin(
+    NAME BIDIRECTIONAL
+    HELP "Plugin containing the code for bidirectional search"
+    SOURCES
+        bidirectional/plugin_interleaving_eager_greedy
+        bidirectional/plugin_interleaving_eager
+        bidirectional/interleaving_eager_search
+        bidirectional/bidirectional_search
+        bidirectional/inverse_task
+    DEPENDS NULL_PRUNING_METHOD ORDERED_SET SUCCESSOR_GENERATOR SEARCH_COMMON
+)
+
 fast_downward_add_plugin_sources(PLANNER_SOURCES)
 
 # The order in PLANNER_SOURCES influences the order in which object

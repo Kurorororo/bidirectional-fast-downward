@@ -84,6 +84,7 @@ class RootTask : public AbstractTask {
   virtual vector<int> get_initial_state_values() const override;
   virtual void convert_state_values(
       vector<int> &values, const AbstractTask *ancestor_task) const override;
+  virtual void set_initial_state() override{};
 };
 
 static void check_fact(const FactPair &fact,
@@ -196,6 +197,15 @@ ExplicitOperator::ExplicitOperator(istream &in, bool is_an_axiom,
   }
   assert(cost >= 0);
 }
+
+ExplicitOperator::ExplicitOperator(vector<FactPair> &&preconditions,
+                                   vector<ExplicitEffect> &&effects, int cost,
+                                   const string &name, bool is_an_axiom)
+    : preconditions(move(preconditions)),
+      effects(move(effects)),
+      cost(cost),
+      name(name),
+      is_an_axiom(is_an_axiom) {}
 
 void read_and_verify_version(istream &in) {
   int version;

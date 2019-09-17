@@ -85,7 +85,7 @@ class InverseTask : public AbstractTask {
       const AbstractTask *ancestor_task) const final override;
   virtual void convert_state_values_from_parent(std::vector<int> &) const {}
 
-  void set_initial_state();
+  virtual void set_initial_state() override;
 
   static std::shared_ptr<AbstractTask> get_inverse_task() {
     static std::shared_ptr<AbstractTask> task =
