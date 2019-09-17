@@ -190,17 +190,17 @@ void InverseTask::init_mutex() {
 }
 
 void InverseTask::init_ranges() {
-  ranges = vector<vector<int>>(get_num_variables(), vector<int>());
-
-  for (int var = 0, n = ranges.size(); var < n; ++var)
+  for (int var = 0; var < get_num_variables(); ++var)
     for (int val = 0, m = get_variable_domain_size(var); val < m; ++val)
       ranges[var].push_back(val);
 
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     FactPair fact1 = parent->get_goal_fact(i);
     ranges[fact1.var].clear();
-    ranges[fact1.var].push_back(fact1.value);
   }
+
+  for (int i = 0; i < get_num_variables(); ++i)
+    if (!ranges[i].empty()) to_be_filled.push_back(i);
 
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     FactPair fact1 = parent->get_goal_fact(i);
@@ -208,9 +208,27 @@ void InverseTask::init_ranges() {
   }
 }
 
+int InverseTask::find_next_variable(const vector<vector<int>> &ranges) {
+  int min = -1;
+  int arg_min = -1;
+
+  for (auto v : to_be_filled) {
+    if (initial_state_values[v] != -1) continue;
+
+    if (ranges[v].empty()) return v;
+
+    if (arg_min == -1 || ranges[v].size() < min) {
+      arg_min = v;
+      min = ranges[v].size();
+    }
+  }
+
+  return arg_min;
+}
+
 bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
                                         int var, vector<int> &values) {
-  if (var == get_num_variables()) return true;
+  if (var == -1) return true;
 
   if (ranges[var].empty()) return false;
 
@@ -222,8 +240,9 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
     values[var] = value;
     vector<vector<int>> child_ranges(ranges);
     propagate_mutex(FactPair(var, value), child_ranges);
+    int next_var = find_next_variable(child_ranges);
 
-    if (informed_backtracking(child_ranges, var + 1, values)) return true;
+    if (informed_backtracking(child_ranges, next_var, values)) return true;
   }
 
   return false;
@@ -231,28 +250,30 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
 
 void InverseTask::set_initial_state() {
   // cout << "generating an inverse initial state (a goal state)" << endl;
+  std::fill(initial_state_values.begin(), initial_state_values.end(), -1);
+
+  for (int i = 0; i < parent->get_num_goals(); ++i) {
+    auto fact = parent->get_goal_fact(i);
+    initial_state_values[fact.var] = fact.value;
+  }
 
   if (parent->get_num_goals() == static_cast<int>(initial_state_values.size()))
     return;
 
-  init_ranges();
-
-  bool success = informed_backtracking(ranges, 0, initial_state_values);
+  int var = find_next_variable(ranges);
+  bool success = informed_backtracking(ranges, var, initial_state_values);
   assert(success);
 }
 
 InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent)
     : initial_state_values(parent->get_num_variables(), -1),
       parent(parent),
-      rng(make_shared<utils::RandomNumberGenerator>(1012)) {
-  for (int i = 0; i < parent->get_num_goals(); ++i) {
-    auto fact = parent->get_goal_fact(i);
-    initial_state_values[fact.var] = fact.value;
-  }
-
+      rng(make_shared<utils::RandomNumberGenerator>(1012)),
+      ranges(parent->get_num_variables(), vector<int>()) {
   if (parent->get_num_goals() < parent->get_num_variables()) {
     cout << "Warning: there are multiple goal states" << endl;
     init_mutex();
+    init_ranges();
     set_initial_state();
   }
 

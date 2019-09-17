@@ -35,7 +35,8 @@ class InverseTask : public AbstractTask {
   void propagate_mutex(const FactPair &fact, vector<vector<int>> &ranges);
   void init_mutex();
   void init_ranges();
-  bool informed_backtracking(const vector<vector<int>> &ranges, int var_index,
+  int find_next_variable(const vector<vector<int>> &ranges);
+  bool informed_backtracking(const vector<vector<int>> &ranges, int var,
                              vector<int> &values);
 
  public:
