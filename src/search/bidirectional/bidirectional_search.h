@@ -25,7 +25,7 @@ class BidirectionalSearch : public SearchEngine {
 
  public:
   BidirectionalSearch(const options::Options &opts);
-  virtual ~BidirectionalSearch() = default;
+  virtual ~BidirectionalSearch();
 };
 }  // namespace bidirectional_search
 

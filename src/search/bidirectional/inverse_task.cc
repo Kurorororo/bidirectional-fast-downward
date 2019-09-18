@@ -8,21 +8,12 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
-#include <utility>
 
 using namespace std;
 
 namespace tasks {
 
-void InverseTask::reverse_operators() {
-  cout << "inversing operators" << endl;
-
-  if (parent->get_num_axioms() > 0)
-    throw runtime_error("Axiom is not supported.");
-
-  unordered_map<string, pair<int, int>> name_to_fact;
-  vector<int> none_of_those_value(get_num_variables(), -1);
-
+void InverseTask::init_name_to_fact() {
   for (int var = 0, n = get_num_variables(); var < n; ++var) {
     for (int val = 0, m = get_variable_domain_size(var); val < m; ++val) {
       FactPair fact(var, val);
@@ -34,200 +25,102 @@ void InverseTask::reverse_operators() {
         name_to_fact[name] = make_pair(fact.var, fact.value);
     }
   }
+}
 
-  unordered_set<string> old_positive_precondition;
-  unordered_set<string> old_negative_precondition;
-  unordered_set<string> old_add_effects;
-  unordered_set<string> old_del_effects;
+FactPair InverseTask::get_negation(const FactPair &fact) const {
+  auto name = get_fact_name(fact);
 
-  unordered_set<string> new_positive_precondition;
-  // vector<bool> new_precondition_none_of_those(get_num_variables(), false);
-  unordered_set<string> new_negative_precondition;
-  // vector<bool> new_effect_none_of_those(get_num_variables(), false);
+  if (name.substr(0, 5) == "Atom ") {
+    auto negated_name = "Negated" + name;
+    auto result = name_to_fact.find(negated_name);
+
+    if (result != name_to_fact.end())
+      return FactPair(result->second.first, result->second.second);
+    else if (none_of_those_value[fact.var])
+      return FactPair(fact.var, none_of_those_value[fact.var]);
+  } else if (name.substr(0, 7) == "Negated") {
+    auto negated_name = name.substr(7, name.size());
+    auto result = name_to_fact.find(negated_name);
+
+    if (result != name_to_fact.end())
+      return FactPair(result->second.first, result->second.second);
+    else if (none_of_those_value[fact.var])
+      return FactPair(fact.var, none_of_those_value[fact.var]);
+  }
+
+  return FactPair(-1, -1);
+}
+
+void InverseTask::reverse_operators() {
+  cout << "inversing operators" << endl;
+  init_name_to_fact();
+
+  if (parent->get_num_axioms() > 0)
+    throw runtime_error("Axiom is not supported.");
 
   vector<int> precondition_var_values(get_num_variables());
+  unordered_set<int> new_precondition_vars;
+  unordered_set<int> new_effect_vars;
 
   for (int i = 0; i < parent->get_num_operators(); ++i) {
-    old_positive_precondition.clear();
-    old_negative_precondition.clear();
-    old_add_effects.clear();
-    old_del_effects.clear();
-
-    new_positive_precondition.clear();
-    // std::fill(new_precondition_none_of_those.begin(),
-    //          new_precondition_none_of_those.end(), false);
-    new_negative_precondition.clear();
-    // std::fill(new_effect_none_of_those.begin(),
-    // new_effect_none_of_those.end(),
-    //          false);
-
     fill(precondition_var_values.begin(), precondition_var_values.end(), -1);
+    new_precondition_vars.clear();
+    new_effect_vars.clear();
 
     for (int j = 0; j < parent->get_num_operator_preconditions(i, false); ++j) {
       FactPair fact = parent->get_operator_precondition(i, j, false);
       precondition_var_values[fact.var] = fact.value;
-      string name = get_fact_name(fact);
-
-      if (name.substr(0, 5) == "Atom ") {
-        old_positive_precondition.insert(name);
-      } else if (name.substr(0, 7) == "Negated") {
-        old_negative_precondition.insert(name.substr(7, name.size()));
-      } else if (name == "<none of those>") {
-        // new_precondition_none_of_those[fact.var] = true;
-      }
     }
+
+    vector<FactPair> new_preconditions;
+    vector<ExplicitEffect> new_effects;
 
     for (int j = 0; j < parent->get_num_operator_effects(i, false); ++j) {
       if (parent->get_num_operator_effect_conditions(i, j, false) > 0)
         throw runtime_error("Conditional effects are not supported.");
 
       FactPair fact = parent->get_operator_effect(i, j, false);
-      string name = get_fact_name(fact);
 
-      if (precondition_var_values[fact.var] != -1 &&
-          precondition_var_values[fact.var] != fact.value) {
-        FactPair pre_fact(fact.var, precondition_var_values[fact.var]);
-        string pre_name = get_fact_name(pre_fact);
+      if (new_precondition_vars.find(fact.var) == new_precondition_vars.end()) {
+        new_preconditions.push_back(fact);
+        new_precondition_vars.insert(fact.var);
 
-        if (pre_name.substr(0, 5) == "Atom ") {
-          old_del_effects.insert(pre_name);
-        } else if (pre_name.substr(0, 7) == "Negated") {
-          old_add_effects.insert(pre_name.substr(7, pre_name.size()));
-        } else if (pre_name == "<none of those>") {
-          // new_precondition_none_of_those[fact.var] = false;
-          // new_effect_none_of_those[fact.var] = true;
-          if (name.substr(0, 5) == "Atom ") {
-            old_negative_precondition.insert(name);
-          } else if (name.substr(0, 7) == "Negated") {
-            old_positive_precondition.insert(name.substr(7, name.size()));
-          }
-        }
-      }
-
-      if (name.substr(0, 5) == "Atom ") {
-        old_add_effects.insert(name);
-      } else if (name.substr(0, 7) == "Negated") {
-        old_del_effects.insert(name.substr(7, name.size()));
-      } else if (name == "<none of those>") {
-        // new_precondition_none_of_those[fact.var] = true;
-      }
-    }
-
-    for (auto name : old_positive_precondition)
-      if (old_del_effects.find(name) == old_del_effects.end())
-        new_positive_precondition.insert(name);
-
-    for (auto name : old_add_effects) new_positive_precondition.insert(name);
-
-    for (auto name : old_negative_precondition)
-      if (old_add_effects.find(name) == old_add_effects.end())
-        new_negative_precondition.insert(name);
-
-    for (auto name : old_del_effects) new_negative_precondition.insert(name);
-
-    vector<FactPair> new_preconditions;
-    unordered_set<int> preconditions_vars;
-
-    for (auto name : new_positive_precondition) {
-      auto result = name_to_fact.find(name);
-
-      if (result != name_to_fact.end()) {
-        int var = result->second.first;
-        int value = result->second.second;
-
-        if (preconditions_vars.find(var) == preconditions_vars.end()) {
-          new_preconditions.push_back(FactPair(var, value));
-          preconditions_vars.insert(var);
-        }
-      }
-    }
-
-    for (auto name : new_negative_precondition) {
-      auto negated_name = "Negated" + name;
-      auto result = name_to_fact.find(negated_name);
-      auto fact = name_to_fact[name];
-
-      if (result != name_to_fact.end()) {
-        int var = result->second.first;
-        int value = result->second.second;
-
-        if (preconditions_vars.find(var) == preconditions_vars.end()) {
-          new_preconditions.push_back(FactPair(var, value));
-          preconditions_vars.insert(var);
-        }
-      } else if (none_of_those_value[fact.first] != -1) {
-        int var = fact.first;
-        int value = none_of_those_value[var];
-
-        if (preconditions_vars.find(var) == preconditions_vars.end()) {
-          new_preconditions.push_back(FactPair(var, value));
-          preconditions_vars.insert(var);
-        }
-      }
-    }
-
-    // for (int var = 0; var < get_num_variables(); ++var) {
-    //  if (new_precondition_none_of_those[var] &&
-    //      preconditions_vars.find(var) == preconditions_vars.end()) {
-    //    new_preconditions.push_back(FactPair(var, none_of_those_value[var]));
-    //    preconditions_vars.insert(var);
-    //  }
-    //}
-
-    vector<ExplicitEffect> new_effects;
-    unordered_set<int> effect_vars;
-
-    for (auto name : old_del_effects) {
-      auto result = name_to_fact.find(name);
-
-      if (result != name_to_fact.end()) {
-        int var = result->second.first;
-        int value = result->second.second;
-
-        if (effect_vars.find(var) == effect_vars.end()) {
+        if (precondition_var_values[fact.var] != -1 &&
+            precondition_var_values[fact.var] != fact.value) {
           new_effects.emplace_back(
-              ExplicitEffect(var, value, move(vector<FactPair>())));
-          effect_vars.insert(var);
+              ExplicitEffect(fact.var, precondition_var_values[fact.var],
+                             move(vector<FactPair>())));
+          new_effect_vars.insert(fact.var);
         }
       }
     }
 
-    for (auto name : old_add_effects) {
-      auto negated_name = "Negated" + name;
-      auto result = name_to_fact.find(negated_name);
-      auto fact = name_to_fact[name];
+    for (int j = 0; j < parent->get_num_operator_effects(i, false); ++j) {
+      FactPair fact = parent->get_operator_effect(i, j, false);
 
-      if (result != name_to_fact.end()) {
-        int var = result->second.first;
-        int value = result->second.second;
+      if (new_effect_vars.find(fact.var) != new_effect_vars.end()) continue;
 
-        if (effect_vars.find(var) == effect_vars.end()) {
-          new_effects.emplace_back(
-              ExplicitEffect(var, value, move(vector<FactPair>())));
-          effect_vars.insert(var);
+      FactPair negated_fact = get_negation(fact);
+
+      if (negated_fact.var != -1 && negated_fact.value != -1) {
+        if (new_effect_vars.find(negated_fact.var) == new_effect_vars.end()) {
+          new_effects.emplace_back(ExplicitEffect(
+              negated_fact.var, negated_fact.value, move(vector<FactPair>())));
+          new_effect_vars.insert(negated_fact.var);
         }
-      } else if (none_of_those_value[fact.first] != -1) {
-        int var = fact.first;
-        int value = none_of_those_value[var];
 
-        if (effect_vars.find(var) == effect_vars.end()) {
-          new_effects.emplace_back(
-              ExplicitEffect(var, value, move(vector<FactPair>())));
-          effect_vars.insert(var);
-        }
+        if (precondition_var_values[negated_fact.var] == negated_fact.value)
+          new_precondition_vars.insert(negated_fact.var);
       }
     }
 
-    // for (int var = 0; var < get_num_variables(); ++var) {
-    //  if (new_effect_none_of_those[var]) {
-    //    if (effect_vars.find(var) == effect_vars.end()) {
-    //      new_effects.emplace_back(ExplicitEffect(var,
-    //      none_of_those_value[var],
-    //                                              move(vector<FactPair>())));
-    //      effect_vars.insert(var);
-    //    }
-    //  }
-    //}
+    for (int var = 0; var < get_num_variables(); ++var) {
+      if (precondition_var_values[var] != -1 &&
+          new_precondition_vars.find(var) == new_precondition_vars.end()) {
+        new_preconditions.emplace_back(
+            FactPair(var, precondition_var_values[var]));
+      }
+    }
 
     int cost = parent->get_operator_cost(i, false);
     string name = parent->get_operator_name(i, false);
@@ -291,12 +184,13 @@ void InverseTask::init_ranges() {
   }
 }
 
-int InverseTask::find_next_variable(const vector<vector<int>> &ranges) {
+int InverseTask::find_next_variable(const vector<int> &values,
+                                    const vector<vector<int>> &ranges) {
   int min = -1;
   int arg_min = -1;
 
   for (auto v : to_be_filled) {
-    if (initial_state_values[v] != -1) continue;
+    if (values[v] != -1) continue;
 
     if (ranges[v].empty()) return v;
 
@@ -310,7 +204,7 @@ int InverseTask::find_next_variable(const vector<vector<int>> &ranges) {
 }
 
 bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
-                                        int var, vector<int> &values) {
+                                        int var) {
   if (var == -1) return true;
 
   if (ranges[var].empty()) return false;
@@ -320,45 +214,85 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
   for (int i = 0, n = ranges[var].size(); i < n; ++i) {
     int index = (start + i) % ranges[var].size();
     int value = ranges[var][index];
-    values[var] = value;
+    initial_state_values[var] = value;
     vector<vector<int>> child_ranges(ranges);
     propagate_mutex(FactPair(var, value), child_ranges);
-    int next_var = find_next_variable(child_ranges);
+    int next_var = find_next_variable(initial_state_values, child_ranges);
 
-    if (informed_backtracking(child_ranges, next_var, values)) return true;
+    if (informed_backtracking(child_ranges, next_var)) return true;
   }
 
-  values[var] = -1;
+  initial_state_values[var] = -1;
+
+  return false;
+}
+
+bool InverseTask::informed_dfs() {
+  while (!open.empty()) {
+    auto top = open.top();
+    open.pop();
+    int var = top.var;
+
+    if (var == -1) {
+      initial_state_values = top.values;
+      return true;
+    }
+
+    for (int i = 0, n = top.ranges[var].size(); i < n; ++i) {
+      DFSNode child(var, top.values, top.ranges);
+      int value = top.ranges[var][i];
+      child.values[var] = value;
+      propagate_mutex(FactPair(var, value), child.ranges);
+      child.var = find_next_variable(child.values, child.ranges);
+      open.push(child);
+    }
+  }
 
   return false;
 }
 
 void InverseTask::set_initial_state() {
   // cout << "generating an inverse initial state (a goal state)" << endl;
-  std::fill(initial_state_values.begin(), initial_state_values.end(), -1);
+  if (parent->get_num_goals() == get_num_variables()) return;
+
+  /**
+
+  fill(initial_state_values.begin(), initial_state_values.end(), -1);
 
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     auto fact = parent->get_goal_fact(i);
     initial_state_values[fact.var] = fact.value;
   }
 
-  if (parent->get_num_goals() == static_cast<int>(initial_state_values.size()))
-    return;
+  bool success = informed_backtracking(ranges, var);
+  */
 
-  int var = find_next_variable(ranges);
-  bool success = informed_backtracking(ranges, var, initial_state_values);
-  assert(success);
+  bool success = informed_dfs();
+
+  if (!success) throw runtime_error("There is no valid goal state!");
 }
 
 InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent)
     : initial_state_values(parent->get_num_variables(), -1),
       parent(parent),
       rng(make_shared<utils::RandomNumberGenerator>(1012)),
-      ranges(parent->get_num_variables(), vector<int>()) {
+      ranges(parent->get_num_variables(), vector<int>()),
+      none_of_those_value(parent->get_num_variables(), -1) {
+  for (int i = 0; i < parent->get_num_goals(); ++i) {
+    auto fact = parent->get_goal_fact(i);
+    initial_state_values[fact.var] = fact.value;
+  }
+
   if (parent->get_num_goals() < parent->get_num_variables()) {
-    cout << "Warning: there are multiple goal states" << endl;
+    cout << "Warning: there are multiple goal states." << endl;
+    cout << "Generating a goal state..." << endl;
+
     init_mutex();
     init_ranges();
+
+    int var = find_next_variable(initial_state_values, ranges);
+    open.push(DFSNode(var, initial_state_values, ranges));
+
     set_initial_state();
   }
 

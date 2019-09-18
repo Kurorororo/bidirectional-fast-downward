@@ -325,9 +325,9 @@ SearchStatus InterleavingEagerSearch::step() {
         open_lists[current_direction]->insert(succ_eval_context,
                                               succ_state.get_id());
       } else {
-        // If we do not reopen closed nodes, we just update the parent pointers.
-        // Note that this could cause an incompatibility between
-        // the g-value and the actual path that is traced back.
+        // If we do not reopen closed nodes, we just update the parent
+        // pointers. Note that this could cause an incompatibility between the
+        // g-value and the actual path that is traced back.
         succ_node.update_parent(*node, op, get_adjusted_cost(op));
       }
     }

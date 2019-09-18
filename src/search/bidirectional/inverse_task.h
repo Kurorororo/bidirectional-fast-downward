@@ -2,8 +2,10 @@
 #define INVERSE_TASK_H
 
 #include <memory>
+#include <stack>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "../abstract_task.h"
@@ -19,25 +21,43 @@ class OptionParser;
 namespace tasks {
 
 class InverseTask : public AbstractTask {
+  struct DFSNode {
+    int var;
+    vector<int> values;
+    vector<vector<int>> ranges;
+
+    DFSNode() {}
+
+    DFSNode(int var, const vector<int> &values,
+            const vector<vector<int>> &ranges)
+        : var(var), values(values), ranges(ranges) {}
+  };
+
   vector<int> initial_state_values;
   vector<FactPair> goals;
   vector<ExplicitOperator> operators;
+  unordered_map<string, pair<int, int>> name_to_fact;
+  vector<int> none_of_those_value;
   vector<vector<vector<FactPair>>> fact_to_mutexes;
   vector<vector<int>> ranges;
   vector<int> to_be_filled;
+  stack<DFSNode> open;
 
  protected:
   std::shared_ptr<utils::RandomNumberGenerator> rng;
   const std::shared_ptr<AbstractTask> parent;
 
+  void init_name_to_fact();
+  FactPair get_negation(const FactPair &fact) const;
   void reverse_operators();
   void reverse_operators_without_strips_info();
   void propagate_mutex(const FactPair &fact, vector<vector<int>> &ranges);
   void init_mutex();
   void init_ranges();
-  int find_next_variable(const vector<vector<int>> &ranges);
-  bool informed_backtracking(const vector<vector<int>> &ranges, int var,
-                             vector<int> &values);
+  int find_next_variable(const vector<int> &values,
+                         const vector<vector<int>> &ranges);
+  bool informed_backtracking(const vector<vector<int>> &ranges, int var);
+  bool informed_dfs();
 
  public:
   InverseTask(const std::shared_ptr<AbstractTask> &parent);

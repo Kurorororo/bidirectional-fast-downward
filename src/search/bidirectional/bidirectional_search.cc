@@ -19,6 +19,39 @@ BidirectionalSearch::BidirectionalSearch(const Options &opts)
       inverse_successor_generator(get_successor_generator(inverse_task_proxy)),
       directions(Direction::NONE) {}
 
+BidirectionalSearch::~BidirectionalSearch() {
+  // for (auto a : get_plan()) {
+  //  OperatorProxy op = task_proxy.get_operators()[a];
+  //  OperatorProxy inverse_op = inverse_task_proxy.get_operators()[a];
+
+  //  cout << endl << op.get_name() << endl;
+
+  //  cout << "forward preconditions" << endl;
+
+  //  for (auto f : op.get_preconditions()) {
+  //    cout << f.get_name() << endl;
+  //  }
+
+  //  cout << "backward preconditions" << endl;
+
+  //  for (auto f : inverse_op.get_preconditions()) {
+  //    cout << f.get_name() << endl;
+  //  }
+
+  //  cout << "forward effects" << endl;
+
+  //  for (auto f : op.get_effects()) {
+  //    cout << f.get_fact().get_name() << endl;
+  //  }
+
+  //  cout << "backward effects" << endl;
+
+  //  for (auto f : inverse_op.get_effects()) {
+  //    cout << f.get_fact().get_name() << endl;
+  //  }
+  //}
+}
+
 bool BidirectionalSearch::check_meeting_and_set_plan(
     BidirectionalSearch::Direction d, const GlobalState &parent,
     OperatorID op_id, const GlobalState &state) {
