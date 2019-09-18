@@ -245,6 +245,8 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
     if (informed_backtracking(child_ranges, next_var, values)) return true;
   }
 
+  values[var] = -1;
+
   return false;
 }
 
