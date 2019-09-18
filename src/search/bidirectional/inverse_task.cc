@@ -21,11 +21,17 @@ void InverseTask::reverse_operators() {
     throw runtime_error("Axiom is not supported.");
 
   unordered_map<string, pair<int, int>> name_to_fact;
+  vector<int> none_of_those_value(get_num_variables(), -1);
 
   for (int var = 0, n = get_num_variables(); var < n; ++var) {
     for (int val = 0, m = get_variable_domain_size(var); val < m; ++val) {
       FactPair fact(var, val);
-      name_to_fact[get_fact_name(fact)] = make_pair(fact.var, fact.value);
+      string name = get_fact_name(fact);
+
+      if (name == "<none of those>")
+        none_of_those_value[var] = val;
+      else
+        name_to_fact[name] = make_pair(fact.var, fact.value);
     }
   }
 
@@ -35,7 +41,9 @@ void InverseTask::reverse_operators() {
   unordered_set<string> old_del_effects;
 
   unordered_set<string> new_positive_precondition;
+  vector<bool> new_precondition_none_of_those(get_num_variables(), false);
   unordered_set<string> new_negative_precondition;
+  vector<bool> new_effect_none_of_those(get_num_variables(), false);
 
   vector<int> precondition_var_values(get_num_variables());
 
@@ -46,7 +54,11 @@ void InverseTask::reverse_operators() {
     old_del_effects.clear();
 
     new_positive_precondition.clear();
+    std::fill(new_precondition_none_of_those.begin(),
+              new_precondition_none_of_those.end(), false);
     new_negative_precondition.clear();
+    std::fill(new_effect_none_of_those.begin(), new_effect_none_of_those.end(),
+              false);
 
     fill(precondition_var_values.begin(), precondition_var_values.end(), -1);
 
@@ -55,10 +67,13 @@ void InverseTask::reverse_operators() {
       precondition_var_values[fact.var] = fact.value;
       string name = get_fact_name(fact);
 
-      if (name.substr(0, 5) == "Atom ")
+      if (name.substr(0, 5) == "Atom ") {
         old_positive_precondition.insert(name);
-      else if (name.substr(0, 7) == "Negated")
-        old_negative_precondition.insert(name.substr(8, name.size()));
+      } else if (name.substr(0, 7) == "Negated") {
+        old_negative_precondition.insert(name.substr(7, name.size()));
+      } else if (name == "<none of those>") {
+        new_precondition_none_of_those[fact.var] = true;
+      }
     }
 
     for (int j = 0; j < parent->get_num_operator_effects(i, false); ++j) {
@@ -66,24 +81,30 @@ void InverseTask::reverse_operators() {
         throw runtime_error("Conditional effects are not supported.");
 
       FactPair fact = parent->get_operator_effect(i, j, false);
+      string name = get_fact_name(fact);
 
       if (precondition_var_values[fact.var] != -1 &&
           precondition_var_values[fact.var] != fact.value) {
         FactPair pre_fact(fact.var, precondition_var_values[fact.var]);
         string pre_name = get_fact_name(pre_fact);
 
-        if (pre_name.substr(0, 5) == "Atom ")
+        if (pre_name.substr(0, 5) == "Atom ") {
           old_del_effects.insert(pre_name);
-        else if (pre_name.substr(0, 7) == "Negated")
-          old_add_effects.insert(pre_name.substr(8, pre_name.size()));
+        } else if (pre_name.substr(0, 7) == "Negated") {
+          old_add_effects.insert(pre_name.substr(7, pre_name.size()));
+        } else if (pre_name == "<none of those>") {
+          new_precondition_none_of_those[fact.var] = false;
+          new_effect_none_of_those[fact.var] = true;
+        }
       }
 
-      string name = get_fact_name(fact);
-
-      if (name.substr(0, 5) == "Atom ")
+      if (name.substr(0, 5) == "Atom ") {
         old_add_effects.insert(name);
-      else if (name.substr(0, 7) == "Negated")
-        old_del_effects.insert(name.substr(8, name.size()));
+      } else if (name.substr(0, 7) == "Negated") {
+        old_del_effects.insert(name.substr(7, name.size()));
+      } else if (name == "<none of those>") {
+        new_precondition_none_of_those[fact.var] = true;
+      }
     }
 
     for (auto name : old_positive_precondition)
@@ -99,6 +120,7 @@ void InverseTask::reverse_operators() {
     for (auto name : old_del_effects) new_negative_precondition.insert(name);
 
     vector<FactPair> new_preconditions;
+    unordered_set<int> preconditions_vars;
 
     for (auto name : new_positive_precondition) {
       auto result = name_to_fact.find(name);
@@ -106,7 +128,11 @@ void InverseTask::reverse_operators() {
       if (result != name_to_fact.end()) {
         int var = result->second.first;
         int value = result->second.second;
-        new_preconditions.push_back(FactPair(var, value));
+
+        if (preconditions_vars.find(var) == preconditions_vars.end()) {
+          new_preconditions.push_back(FactPair(var, value));
+          preconditions_vars.insert(var);
+        }
       }
     }
 
@@ -117,11 +143,24 @@ void InverseTask::reverse_operators() {
       if (result != name_to_fact.end()) {
         int var = result->second.first;
         int value = result->second.second;
-        new_preconditions.push_back(FactPair(var, value));
+
+        if (preconditions_vars.find(var) == preconditions_vars.end()) {
+          new_preconditions.push_back(FactPair(var, value));
+          preconditions_vars.insert(var);
+        }
+      }
+    }
+
+    for (int var = 0; var < get_num_variables(); ++var) {
+      if (new_precondition_none_of_those[var] &&
+          preconditions_vars.find(var) == preconditions_vars.end()) {
+        new_preconditions.push_back(FactPair(var, none_of_those_value[var]));
+        preconditions_vars.insert(var);
       }
     }
 
     vector<ExplicitEffect> new_effects;
+    unordered_set<int> effect_vars;
 
     for (auto name : old_del_effects) {
       auto result = name_to_fact.find(name);
@@ -129,8 +168,12 @@ void InverseTask::reverse_operators() {
       if (result != name_to_fact.end()) {
         int var = result->second.first;
         int value = result->second.second;
-        new_effects.emplace_back(
-            ExplicitEffect(var, value, move(vector<FactPair>())));
+
+        if (effect_vars.find(var) == effect_vars.end()) {
+          new_effects.emplace_back(
+              ExplicitEffect(var, value, move(vector<FactPair>())));
+          effect_vars.insert(var);
+        }
       }
     }
 
@@ -141,8 +184,22 @@ void InverseTask::reverse_operators() {
       if (result != name_to_fact.end()) {
         int var = result->second.first;
         int value = result->second.second;
-        new_effects.emplace_back(
-            ExplicitEffect(var, value, move(vector<FactPair>())));
+
+        if (effect_vars.find(var) == effect_vars.end()) {
+          new_effects.emplace_back(
+              ExplicitEffect(var, value, move(vector<FactPair>())));
+          effect_vars.insert(var);
+        }
+      }
+    }
+
+    for (int var = 0; var < get_num_variables(); ++var) {
+      if (new_effect_none_of_those[var]) {
+        if (effect_vars.find(var) == effect_vars.end()) {
+          new_effects.emplace_back(ExplicitEffect(var, none_of_those_value[var],
+                                                  move(vector<FactPair>())));
+          effect_vars.insert(var);
+        }
       }
     }
 
