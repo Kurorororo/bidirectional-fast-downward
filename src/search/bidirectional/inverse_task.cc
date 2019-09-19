@@ -287,13 +287,12 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
 
   int start = 0;
 
-  if (variable_ordering == Ordering::REVERSE) start = ranges[var].size() - 1;
-
   if (value_ordering == Ordering::RANDOM)
     start = rng->operator()(ranges[var].size());
 
   for (int i = 0, n = ranges[var].size(); i < n; ++i) {
-    int index = (start + i) % ranges[var].size();
+    int j = value_ordering == Ordering::REVERSE ? n - i - 1 : i;
+    int index = (start + j) % ranges[var].size();
     int value = ranges[var][index];
     initial_state_values[var] = value;
     vector<vector<int>> child_ranges(ranges);
@@ -331,6 +330,8 @@ bool InverseTask::informed_dfs() {
       }
     }
 
+    if (top->ranges[var].empty()) return false;
+
     vector<shared_ptr<DFSNode>> tmp;
 
     for (int i = 0, n = top->ranges[var].size(); i < n; ++i) {
@@ -342,24 +343,22 @@ bool InverseTask::informed_dfs() {
       tmp.push_back(child);
     }
 
-    if (ranges[var].empty()) return false;
+    // auto compare = [this, var](shared_ptr<const DFSNode> node1,
+    //                           shared_ptr<const DFSNode> node2) {
+    //  int sum1 = 0;
 
-    auto compare = [this, var](shared_ptr<const DFSNode> node1,
-                               shared_ptr<const DFSNode> node2) {
-      int sum1 = 0;
+    //  for (int v = 0; v < get_num_variables(); ++v)
+    //    if (node1->values[v] == -1) sum1 += node1->ranges[v].size();
 
-      for (int v = 0; v < get_num_variables(); ++v)
-        if (node1->values[v] == -1) sum1 += node1->ranges[v].size();
+    //  int sum2 = 0;
 
-      int sum2 = 0;
+    //  for (int v = 0; v < get_num_variables(); ++v)
+    //    if (node2->values[v] == -1) sum2 += node2->ranges[v].size();
 
-      for (int v = 0; v < get_num_variables(); ++v)
-        if (node2->values[v] == -1) sum2 += node2->ranges[v].size();
+    //  return sum1 > sum2;
+    //};
 
-      return sum1 > sum2;
-    };
-
-    sort(tmp.begin(), tmp.end(), compare);
+    // sort(tmp.begin(), tmp.end(), compare);
 
     for (auto node : tmp) open.push(node);
   }

@@ -33,7 +33,7 @@ namespace landmarks {
 // Construction and destruction
 Exploration::Exploration(const TaskProxy &task_proxy)
     : task_proxy(task_proxy), did_write_overflow_warning(false) {
-  cout << "Initializing Exploration..." << endl;
+  // cout << "Initializing Exploration..." << endl;
 
   // Build propositions.
   for (VariableProxy var : task_proxy.get_variables()) {
