@@ -1,7 +1,9 @@
 #include "inverse_task.h"
 
+#include "../landmarks/exploration.h"
 #include "../option_parser.h"
 #include "../plugin.h"
+#include "../task_proxy.h"
 #include "../utils/rng.h"
 #include "../utils/system.h"
 
@@ -130,9 +132,9 @@ void InverseTask::reverse_operators() {
   }
 }
 
-void InverseTask::propagate_mutex(const FactPair &fact,
+void InverseTask::propagate_mutex(int var, int value,
                                   vector<vector<int>> &ranges) {
-  for (auto f : fact_to_mutexes[fact.var][fact.value]) {
+  for (auto f : fact_to_mutexes[var][value]) {
     ranges[f.var].erase(
         std::remove(ranges[f.var].begin(), ranges[f.var].end(), f.value),
         ranges[f.var].end());
@@ -175,49 +177,128 @@ void InverseTask::init_ranges() {
     ranges[fact1.var].clear();
   }
 
-  for (int i = 0; i < get_num_variables(); ++i)
-    if (!ranges[i].empty()) to_be_filled.push_back(i);
-
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     FactPair fact1 = parent->get_goal_fact(i);
-    propagate_mutex(fact1, ranges);
+    propagate_mutex(fact1.var, fact1.value, ranges);
   }
-}
 
-int InverseTask::find_next_variable(const vector<int> &values,
-                                    const vector<vector<int>> &ranges) {
-  int min = -1;
-  int arg_min = -1;
-
-  for (auto v : to_be_filled) {
-    if (values[v] != -1) continue;
-
-    if (ranges[v].empty()) return v;
-
-    if (arg_min == -1 || ranges[v].size() < min) {
-      arg_min = v;
-      min = ranges[v].size();
+  for (int var = 0; var < get_num_variables(); ++var) {
+    if (ranges[var].size() == 1) {
+      initial_state_values[var] = ranges[var][0];
+      ranges[var].clear();
+    } else if (!ranges[var].empty()) {
+      to_be_filled.push_back(var);
     }
   }
 
-  return arg_min;
+  if (value_ordering == Ordering::MUTEX) {
+    for (auto var : to_be_filled) {
+      auto compare = [this, var](int val1, int val2) {
+        return fact_to_mutexes[var][val1].size() >
+               fact_to_mutexes[var][val2].size();
+      };
+
+      sort(ranges[var].begin(), ranges[var].end(), compare);
+    }
+  }
+}
+
+int InverseTask::find_next_variable(int var, const vector<int> &values,
+                                    const vector<vector<int>> &ranges) {
+  int next = -1;
+
+  if (variable_ordering == Ordering::DEFAULT) {
+    next = var + 1;
+
+    while (next < get_num_variables() &&
+           (values[next] != -1 || ranges[next].empty()))
+      ++next;
+
+    if (next == get_num_variables()) next = -1;
+  }
+
+  if (variable_ordering == Ordering::REVERSE) {
+    next = get_num_variables() - 1;
+
+    while (next > 0 && (values[next] != -1 || ranges[next].empty())) --next;
+  }
+
+  if (variable_ordering == RANDOM) {
+    int counter = 1;
+
+    for (auto v : to_be_filled) {
+      if (values[v] != -1) continue;
+
+      if (ranges[v].empty()) return v;
+
+      if (rng->operator()(counter) == 0) next = v;
+
+      ++counter;
+    }
+  }
+
+  if (variable_ordering == MUTEX) {
+    int min = -1;
+
+    for (auto v : to_be_filled) {
+      if (values[v] != -1) continue;
+
+      if (ranges[v].empty()) return v;
+
+      int sum = 0;
+
+      for (auto u : fact_to_mutexes[v]) sum += u.size();
+
+      if (next == -1 || sum < min) {
+        next = v;
+        min = sum;
+      }
+    }
+  }
+
+  if (variable_ordering == Ordering::RANGE) {
+    int min = -1;
+
+    for (auto v : to_be_filled) {
+      if (values[v] != -1) continue;
+
+      if (ranges[v].empty()) return v;
+
+      if (next == -1 || ranges[v].size() < min) {
+        next = v;
+        min = ranges[v].size();
+      }
+    }
+  }
+
+  return next;
 }
 
 bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
                                         int var) {
-  if (var == -1) return true;
+  if (var == -1) {
+    TaskProxy proxy(*this);
+    landmarks::Exploration exploration(proxy);
+
+    return exploration.compute_reachability();
+  }
 
   if (ranges[var].empty()) return false;
 
-  int start = rng->operator()(ranges[var].size());
+  int start = 0;
+
+  if (variable_ordering == Ordering::REVERSE) start = ranges[var].size() - 1;
+
+  if (value_ordering == Ordering::RANDOM)
+    start = rng->operator()(ranges[var].size());
 
   for (int i = 0, n = ranges[var].size(); i < n; ++i) {
     int index = (start + i) % ranges[var].size();
     int value = ranges[var][index];
     initial_state_values[var] = value;
     vector<vector<int>> child_ranges(ranges);
-    propagate_mutex(FactPair(var, value), child_ranges);
-    int next_var = find_next_variable(initial_state_values, child_ranges);
+    propagate_mutex(var, value, child_ranges);
+    int next_var = find_next_variable(var, initial_state_values, child_ranges);
 
     if (informed_backtracking(child_ranges, next_var)) return true;
   }
@@ -228,24 +309,59 @@ bool InverseTask::informed_backtracking(const vector<vector<int>> &ranges,
 }
 
 bool InverseTask::informed_dfs() {
+  stack<shared_ptr<DFSNode>> open;
+  int var = find_next_variable(-1, initial_state_values, ranges);
+  open.push(make_shared<DFSNode>(var, initial_state_values, ranges));
+
   while (!open.empty()) {
     auto top = open.top();
     open.pop();
-    int var = top.var;
+    int var = top->var;
 
     if (var == -1) {
-      initial_state_values = top.values;
-      return true;
+      initial_state_values.swap(top->values);
+      TaskProxy proxy(*this);
+      landmarks::Exploration exploration(proxy);
+
+      if (exploration.compute_reachability()) {
+        return true;
+      } else {
+        initial_state_values.swap(top->values);
+        continue;
+      }
     }
 
-    for (int i = 0, n = top.ranges[var].size(); i < n; ++i) {
-      DFSNode child(var, top.values, top.ranges);
-      int value = top.ranges[var][i];
-      child.values[var] = value;
-      propagate_mutex(FactPair(var, value), child.ranges);
-      child.var = find_next_variable(child.values, child.ranges);
-      open.push(child);
+    vector<shared_ptr<DFSNode>> tmp;
+
+    for (int i = 0, n = top->ranges[var].size(); i < n; ++i) {
+      auto child = make_shared<DFSNode>(var, top->values, top->ranges);
+      int value = ranges[var][i];
+      child->values[var] = value;
+      propagate_mutex(var, value, child->ranges);
+      child->var = find_next_variable(var, child->values, child->ranges);
+      tmp.push_back(child);
     }
+
+    if (ranges[var].empty()) return false;
+
+    auto compare = [this, var](shared_ptr<const DFSNode> node1,
+                               shared_ptr<const DFSNode> node2) {
+      int sum1 = 0;
+
+      for (int v = 0; v < get_num_variables(); ++v)
+        if (node1->values[v] == -1) sum1 += node1->ranges[v].size();
+
+      int sum2 = 0;
+
+      for (int v = 0; v < get_num_variables(); ++v)
+        if (node2->values[v] == -1) sum2 += node2->ranges[v].size();
+
+      return sum1 > sum2;
+    };
+
+    sort(tmp.begin(), tmp.end(), compare);
+
+    for (auto node : tmp) open.push(node);
   }
 
   return false;
@@ -255,45 +371,30 @@ void InverseTask::set_initial_state() {
   // cout << "generating an inverse initial state (a goal state)" << endl;
   if (parent->get_num_goals() == get_num_variables()) return;
 
-  /**
+  bool success = false;
 
-  fill(initial_state_values.begin(), initial_state_values.end(), -1);
-
-  for (int i = 0; i < parent->get_num_goals(); ++i) {
-    auto fact = parent->get_goal_fact(i);
-    initial_state_values[fact.var] = fact.value;
+  if (value_ordering == RANGE) {
+    success = informed_dfs();
+  } else {
+    int var = find_next_variable(-1, initial_state_values, ranges);
+    success = informed_backtracking(ranges, var);
   }
-
-  bool success = informed_backtracking(ranges, var);
-  */
-
-  bool success = informed_dfs();
 
   if (!success) throw runtime_error("There is no valid goal state!");
 }
 
-InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent)
+InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent,
+                         Ordering variable_ordering, Ordering value_ordering)
     : initial_state_values(parent->get_num_variables(), -1),
       parent(parent),
       rng(make_shared<utils::RandomNumberGenerator>(1012)),
       ranges(parent->get_num_variables(), vector<int>()),
-      none_of_those_value(parent->get_num_variables(), -1) {
+      none_of_those_value(parent->get_num_variables(), -1),
+      variable_ordering(variable_ordering),
+      value_ordering(value_ordering) {
   for (int i = 0; i < parent->get_num_goals(); ++i) {
     auto fact = parent->get_goal_fact(i);
     initial_state_values[fact.var] = fact.value;
-  }
-
-  if (parent->get_num_goals() < parent->get_num_variables()) {
-    cout << "Warning: there are multiple goal states." << endl;
-    cout << "Generating a goal state..." << endl;
-
-    init_mutex();
-    init_ranges();
-
-    int var = find_next_variable(initial_state_values, ranges);
-    open.push(DFSNode(var, initial_state_values, ranges));
-
-    set_initial_state();
   }
 
   auto parent_initial_state_values = parent->get_initial_state_values();
@@ -302,6 +403,15 @@ InverseTask::InverseTask(const shared_ptr<AbstractTask> &parent)
     goals.push_back(FactPair(i, parent_initial_state_values[i]));
 
   reverse_operators();
+
+  if (parent->get_num_goals() < parent->get_num_variables()) {
+    cout << "Warning: there are multiple goal states." << endl;
+    cout << "Generating a goal state..." << endl;
+
+    init_mutex();
+    init_ranges();
+    set_initial_state();
+  }
 }
 
 int InverseTask::get_num_variables() const {
@@ -403,6 +513,42 @@ void InverseTask::convert_state_values(
 }
 
 static shared_ptr<AbstractTask> _parse(OptionParser &parser) {
+  // vector<string> variable_orderings;
+  // vector<string> variable_orderings_doc;
+  // variable_orderings.push_back("DEFAULT");
+  // variable_orderings_doc.push_back("fast-downward order");
+  // variable_orderings.push_back("RANDOM");
+  // variable_orderings_doc.push_back("random choice");
+  // variable_orderings.push_back("MUTEX");
+  // variable_orderings_doc.push_back(
+  //    "select one with the highest number of mutex groups");
+  // variable_orderings.push_back("RANGE");
+  // variable_orderings_doc.push_back(
+  //    "select one with the lowest number of value options");
+  // parser.add_enum_option("var_order", variable_orderings,
+  //                       "order to select variables in the goal generation",
+  //                       "DEFAULT", variable_orderings_doc);
+
+  // vector<string> value_orderings;
+  // vector<string> value_orderings_doc;
+  // value_orderings.push_back("DEFAULT");
+  // value_orderings_doc.push_back("fast-downward order");
+  // value_orderings.push_back("RANDOM");
+  // value_orderings_doc.push_back("random choice");
+  // value_orderings.push_back("MUTEX");
+  // value_orderings_doc.push_back(
+  //    "select one with the highest number of mutex groups");
+  // value_orderings.push_back("RANGE");
+  // value_orderings_doc.push_back(
+  //    "select one with the lowest number of value options");
+  // parser.add_enum_option("val_order", value_orderings,
+  //                       "order to select values in the goal generation",
+  //                       "DEFAULT", value_orderings_doc);
+
+  Options opts = parser.parse();
+  // InverseTask::Ordering variable_ordering(opts.get_enum("var_order"));
+  // InverseTask::Ordering value_ordering(opts.get_enum("val_order"));
+
   if (parser.dry_run())
     return nullptr;
   else

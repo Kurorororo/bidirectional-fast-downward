@@ -49,6 +49,36 @@ void InterleavingEagerSearch::initialize() {
   assert(open_lists[Direction::FORWARD]);
   assert(open_lists[Direction::BACKWARD]);
 
+  // for (auto inverse_op : inverse_task_proxy.get_operators()) {
+  //  OperatorProxy op = task_proxy.get_operators()[inverse_op.get_id()];
+
+  //  cout << endl << op.get_name() << endl;
+
+  //  cout << "forward preconditions" << endl;
+
+  //  for (auto f : op.get_preconditions()) {
+  //    cout << f.get_name() << endl;
+  //  }
+
+  //  cout << "backward preconditions" << endl;
+
+  //  for (auto f : inverse_op.get_preconditions()) {
+  //    cout << f.get_name() << endl;
+  //  }
+
+  //  cout << "forward effects" << endl;
+
+  //  for (auto f : op.get_effects()) {
+  //    cout << f.get_fact().get_name() << endl;
+  //  }
+
+  //  cout << "backward effects" << endl;
+
+  //  for (auto f : inverse_op.get_effects()) {
+  //    cout << f.get_fact().get_name() << endl;
+  //  }
+  //}
+
   vector<Direction> ds{Direction::FORWARD, Direction::BACKWARD};
 
   for (auto d : ds) {
@@ -88,35 +118,7 @@ void InterleavingEagerSearch::initialize() {
   directions[initial_state] = Direction::FORWARD;
 
   State goal_state = inverse_task_proxy.get_initial_state();
-  std::vector<OperatorID> applicable_ops;
-
-  while (true) {
-    inverse_successor_generator.generate_applicable_ops(goal_state,
-                                                        applicable_ops);
-
-    if (applicable_ops.empty()) {
-      inverse_task->set_initial_state();
-      goal_state = inverse_task_proxy.get_initial_state();
-    } else {
-      break;
-    }
-  }
-
   GlobalState global_goal_state = state_registry.create_goal_state(goal_state);
-
-  while (true) {
-    EvaluationContext eval_context_b(global_goal_state, 0, true, &statistics);
-
-    if (open_lists[Direction::BACKWARD]->is_dead_end(eval_context_b)) {
-      // cout << "Goal state is a dead end." << endl;
-      inverse_task->set_initial_state();
-      goal_state = inverse_task_proxy.get_initial_state();
-      global_goal_state = state_registry.create_goal_state(goal_state);
-    } else {
-      break;
-    }
-  }
-
   for (Evaluator *evaluator : path_dependent_evaluators[Direction::BACKWARD]) {
     evaluator->notify_initial_state(global_goal_state);
   }

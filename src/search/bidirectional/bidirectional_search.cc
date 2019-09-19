@@ -19,6 +19,8 @@ BidirectionalSearch::BidirectionalSearch(const Options &opts)
       inverse_successor_generator(get_successor_generator(inverse_task_proxy)),
       directions(Direction::NONE) {}
 
+void BidirectionalSearch::initialize() {}
+
 BidirectionalSearch::~BidirectionalSearch() {
   // for (auto a : get_plan()) {
   //  OperatorProxy op = task_proxy.get_operators()[a];

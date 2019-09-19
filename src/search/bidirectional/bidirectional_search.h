@@ -20,6 +20,8 @@ class BidirectionalSearch : public SearchEngine {
   const successor_generator::SuccessorGenerator &inverse_successor_generator;
   PerStateInformation<Direction> directions;
 
+  virtual void initialize() override;
+
   bool check_meeting_and_set_plan(Direction d, const GlobalState &parent,
                                   OperatorID op_id, const GlobalState &state);
 

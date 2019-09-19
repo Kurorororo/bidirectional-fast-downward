@@ -41,7 +41,6 @@ class InverseTask : public AbstractTask {
   vector<vector<vector<FactPair>>> fact_to_mutexes;
   vector<vector<int>> ranges;
   vector<int> to_be_filled;
-  stack<DFSNode> open;
 
  protected:
   std::shared_ptr<utils::RandomNumberGenerator> rng;
@@ -50,17 +49,23 @@ class InverseTask : public AbstractTask {
   void init_name_to_fact();
   FactPair get_negation(const FactPair &fact) const;
   void reverse_operators();
-  void reverse_operators_without_strips_info();
-  void propagate_mutex(const FactPair &fact, vector<vector<int>> &ranges);
+  void propagate_mutex(int var, int value, vector<vector<int>> &ranges);
   void init_mutex();
   void init_ranges();
-  int find_next_variable(const vector<int> &values,
+  int find_next_variable(int var_index, const vector<int> &values,
                          const vector<vector<int>> &ranges);
   bool informed_backtracking(const vector<vector<int>> &ranges, int var);
   bool informed_dfs();
 
  public:
-  InverseTask(const std::shared_ptr<AbstractTask> &parent);
+  enum Ordering { DEFAULT = 0, REVERSE = 1, RANDOM = 2, MUTEX = 3, RANGE = 4 };
+
+  Ordering variable_ordering;
+  Ordering value_ordering;
+
+  InverseTask(const std::shared_ptr<AbstractTask> &parent,
+              Ordering variable_ordering = Ordering::DEFAULT,
+              Ordering value_ordering = Ordering::DEFAULT);
   virtual ~InverseTask() override = default;
 
   virtual int get_num_variables() const override;
@@ -110,8 +115,8 @@ class InverseTask : public AbstractTask {
   virtual void set_initial_state() override;
 
   static std::shared_ptr<AbstractTask> get_inverse_task() {
-    static std::shared_ptr<AbstractTask> task =
-        std::make_shared<InverseTask>(g_root_task);
+    static std::shared_ptr<AbstractTask> task = std::make_shared<InverseTask>(
+        g_root_task, Ordering::RANGE, Ordering::RANDOM);
 
     return task;
   }
