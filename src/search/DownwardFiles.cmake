@@ -763,6 +763,8 @@ fast_downward_plugin(
         bidirectional/plugin_interleaving_eager
         bidirectional/interleaving_eager_search
         bidirectional/bidirectional_search
+        bidirectional/plugin_backward_eager_greedy
+        bidirectional/backward_eager_search
         bidirectional/inverse_task
     DEPENDS NULL_PRUNING_METHOD ORDERED_SET SUCCESSOR_GENERATOR SEARCH_COMMON
 )
