@@ -769,6 +769,22 @@ fast_downward_plugin(
     DEPENDS NULL_PRUNING_METHOD ORDERED_SET SUCCESSOR_GENERATOR SEARCH_COMMON
 )
 
+fast_downward_plugin(
+    NAME FRONT_TO_FRONT
+    HELP "Plugin containing the code for front to front bidirectional search"
+    SOURCES
+        front_to_front/plugin_front_to_front_eager_greedy
+        front_to_front/front_to_front_eager_search
+        front_to_front/front_to_front_best_first_open_list
+        front_to_front/front_to_front_open_list
+        front_to_front/front_to_front_ff_heuristic
+        front_to_front/front_to_front_additive_heuristic
+        front_to_front/front_to_front_relaxation_heuristic
+        front_to_front/front_to_front_goal_count_heuristic
+        front_to_front/front_to_front_heuristic
+    DEPENDS BIDIRECTIONAL
+)
+
 fast_downward_add_plugin_sources(PLANNER_SOURCES)
 
 # The order in PLANNER_SOURCES influences the order in which object

@@ -1,8 +1,8 @@
-#ifndef INTERLEAVING_EAGER_SEARCH_H
-#define INTERLEAVING_EAGER_SEARCH_H
+#ifndef FRONT_TO_FRONT_EAGER_SEARCH_H
+#define FRONT_TO_FRONT_EAGER_SEARCH_H
 
-#include "../open_list.h"
-#include "bidirectional_search.h"
+#include "../bidirectional/bidirectional_search.h"
+#include "front_to_front_open_list.h"
 
 #include <memory>
 #include <vector>
@@ -15,12 +15,13 @@ class OptionParser;
 class Options;
 }  // namespace options
 
-namespace interleaving_eager_search {
-class InterleavingEagerSearch
+namespace front_to_front_eager_search {
+class FrontToFrontEagerSearch
     : public bidirectional_search::BidirectionalSearch {
   const bool reopen_closed_nodes;
 
-  std::unordered_map<Direction, std::shared_ptr<StateOpenList>> open_lists;
+  std::unordered_map<Direction, std::shared_ptr<FrontToFrontStateOpenList>>
+      open_lists;
   std::unordered_map<Direction, std::shared_ptr<Evaluator>> f_evaluators;
 
   std::unordered_map<Direction, std::vector<Evaluator *>>
@@ -41,8 +42,8 @@ class InterleavingEagerSearch
   virtual SearchStatus step() override;
 
  public:
-  explicit InterleavingEagerSearch(const options::Options &opts);
-  virtual ~InterleavingEagerSearch() = default;
+  explicit FrontToFrontEagerSearch(const options::Options &opts);
+  virtual ~FrontToFrontEagerSearch() = default;
 
   virtual void print_statistics() const override;
 
@@ -50,6 +51,6 @@ class InterleavingEagerSearch
 };
 
 extern void add_options_to_parser(options::OptionParser &parser);
-}  // namespace interleaving_eager_search
+}  // namespace front_to_front_eager_search
 
 #endif
