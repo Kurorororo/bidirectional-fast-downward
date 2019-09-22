@@ -16,7 +16,7 @@ namespace front_to_front_additive_heuristic {
 FrontToFrontAdditiveHeuristic::FrontToFrontAdditiveHeuristic(
     const Options &opts)
     : FrontToFrontRelaxationHeuristic(opts), did_write_overflow_warning(false) {
-  cout << "Initializing front_to_front_additive heuristic..." << endl;
+  cout << "Initializing additive heuristic..." << endl;
 }
 
 void FrontToFrontAdditiveHeuristic::write_overflow_warning() {
@@ -173,5 +173,5 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
     return make_shared<FrontToFrontAdditiveHeuristic>(opts);
 }
 
-static Plugin<Evaluator> _plugin("front_to_front_add", _parse);
+static Plugin<FrontToFrontHeuristic> _plugin("front_to_front_add", _parse);
 }  // namespace front_to_front_additive_heuristic
