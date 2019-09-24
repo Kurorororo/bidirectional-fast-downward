@@ -191,8 +191,7 @@ int RegressionTask::convert_operator_index(
   if (ancestor_task == this) {
     return index;
   }
-  int parent_index = convert_operator_index_to_parent(index);
-  return parent->convert_operator_index(parent_index, ancestor_task);
+  return parent->convert_operator_index(index, ancestor_task);
 }
 
 int RegressionTask::get_num_axioms() const { return 0; }

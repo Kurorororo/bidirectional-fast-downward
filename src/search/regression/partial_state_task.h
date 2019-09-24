@@ -1,5 +1,5 @@
-#ifndef REGRESSION_TASK_H
-#define REGRESSION_TASK_H
+#ifndef PARTIAL_STATE_TASK_H
+#define PARTIAL_STATE_TASK_H
 
 #include <memory>
 #include <stack>
@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "../abstract_task.h"
-#include "partial_state_task.h"
+#include "../tasks/root_task.h"
 
 using namespace std;
 
@@ -19,25 +19,15 @@ class OptionParser;
 
 namespace tasks {
 
-class RegressionTask : public AbstractTask {
-  vector<int> initial_state_values;
-  vector<FactPair> goals;
-  vector<ExplicitOperator> operators;
-  vector<vector<bool>> is_negative_precondition_vector;
-  vector<vector<vector<FactPair>>> fact_to_mutexes;
-
+class PartialStateTask : public AbstractTask {
  protected:
   const std::shared_ptr<AbstractTask> parent;
 
-  void init_mutex();
-  void reverse_operators();
-
  public:
-  RegressionTask(const std::shared_ptr<AbstractTask> &parent);
-  virtual ~RegressionTask() override = default;
+  PartialStateTask(const std::shared_ptr<AbstractTask> &parent);
+  virtual ~PartialStateTask() override = default;
 
-  bool is_negative_precondition(int op_index, int fact_index,
-                                bool is_axiom) const;
+  std::vector<int> get_goal_state_values() const;
 
   virtual int get_num_variables() const override;
   virtual std::string get_variable_name(int var) const override;
@@ -80,10 +70,9 @@ class RegressionTask : public AbstractTask {
       const AbstractTask *ancestor_task) const final override;
   virtual void convert_state_values_from_parent(std::vector<int> &) const {}
 
-  static std::shared_ptr<RegressionTask> get_regression_task() {
-    static std::shared_ptr<RegressionTask> task =
-        std::make_shared<RegressionTask>(
-            PartialStateTask::get_partial_state_task());
+  static std::shared_ptr<AbstractTask> get_partial_state_task() {
+    static std::shared_ptr<AbstractTask> task =
+        std::make_shared<AbstractTask>(g_root_task);
 
     return task;
   }
