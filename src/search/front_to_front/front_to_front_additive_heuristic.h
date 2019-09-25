@@ -67,6 +67,8 @@ class FrontToFrontAdditiveHeuristic
   void precompute_exploration(const State &state);
 
  protected:
+  bool fall_back;
+
   virtual int compute_heuristic(const GlobalState &global_state) override;
 
   // Common part of h^add and h^ff computation.

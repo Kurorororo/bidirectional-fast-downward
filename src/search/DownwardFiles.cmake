@@ -789,6 +789,8 @@ fast_downward_plugin(
     NAME REGRESSION
     HELP "Plugin containing the code for regression search"
     SOURCES
+        regression/plugin_regression_front_to_front_eager_greedy
+        regression/regression_front_to_front_eager_search
         regression/plugin_regression_eager_greedy
         regression/regression_eager_search
         regression/regression_successor_generator

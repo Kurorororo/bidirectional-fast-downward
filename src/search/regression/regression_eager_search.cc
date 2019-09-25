@@ -159,7 +159,8 @@ SearchStatus RegressionEagerSearch::step() {
   regression_successor_generator.generate_applicable_ops(s, applicable_ops);
 
   open_list->set_goal(s);
-  EvaluationContext eval_context(s, node->get_g(), false, &statistics, true);
+  EvaluationContext eval_context(initial_state, node->get_g(), false,
+                                 &statistics, true);
   ordered_set::OrderedSet<OperatorID> preferred_operators;
   for (const shared_ptr<Evaluator> &preferred_operator_evaluator :
        preferred_operator_evaluators) {
@@ -231,7 +232,8 @@ SearchStatus RegressionEagerSearch::step() {
         }
         pre_node.reopen(*node, op, get_adjusted_cost(op));
 
-        EvaluationContext pre_eval_context(pre_state, pre_node.get_g(),
+        open_list->set_goal(pre_state);
+        EvaluationContext pre_eval_context(initial_state, pre_node.get_g(),
                                            is_preferred, &statistics);
 
         /*
