@@ -130,8 +130,34 @@ vector<int> RegressionTask::get_goal_state_values() const {
     values[fact.var] = fact.value;
   }
 
+  vector<unordered_set<int>> ranges(get_num_variables(), unordered_set<int>());
+
+  for (int var = 0; var < get_num_variables(); ++var)
+    for (int value = 0; value < get_variable_domain_size(var) - 1; ++value)
+      ranges[var].insert(value);
+
+  for (int var = 0; var < get_num_variables(); ++var) {
+    int value = values[var];
+
+    if (value == get_variable_domain_size(var) - 1) continue;
+
+    for (auto fact : fact_to_mutexes[var][value]) {
+      auto result = ranges[fact.var].find(fact.value);
+      if (result != ranges[fact.var].end()) ranges[fact.var].erase(result);
+    }
+  }
+
+  for (int var = 0; var < get_num_variables(); ++var) {
+    int value = values[var];
+
+    if (value != get_variable_domain_size(var) - 1) continue;
+
+    if (ranges[var].size() == 1) values[var] = *ranges[var].begin();
+  }
+
   return values;
 }
+
 bool RegressionTask::is_negative_precondition(int op_index, int fact_index,
                                               bool is_axiom) const {
   return is_negative_precondition_vector[op_index][fact_index];
