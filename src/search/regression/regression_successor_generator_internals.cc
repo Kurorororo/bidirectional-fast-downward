@@ -39,16 +39,20 @@ void GeneratorSwitchFact::generate_applicable_ops(
 void GeneratorSwitchFact::generate_applicable_ops(
     const GlobalState &state, vector<OperatorID> &applicable_ops) const {
   if (state[var] == unknown_val) {
-    if (generator_true != nullptr)
+    if (generator_true != nullptr) {
       generator_true->generate_applicable_ops(state, applicable_ops);
-    if (generator_false != nullptr)
+    }
+    if (generator_false != nullptr) {
       generator_false->generate_applicable_ops(state, applicable_ops);
+    }
   } else if (state[var] == val) {
-    if (generator_true != nullptr)
+    if (generator_true != nullptr) {
       generator_true->generate_applicable_ops(state, applicable_ops);
+    }
   } else {
-    if (generator_false != nullptr)
+    if (generator_false != nullptr) {
       generator_false->generate_applicable_ops(state, applicable_ops);
+    }
   }
 }
 

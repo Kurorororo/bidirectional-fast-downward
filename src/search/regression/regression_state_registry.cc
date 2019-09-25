@@ -8,7 +8,7 @@ void RegressionStateRegistry::init_mutex() {
 
   fact_to_mutexes.resize(variables.size(), vector<vector<pair<int, int>>>());
 
-  for (int var1 = 0, n = variables.size(); var1 < get_num_variables(); ++var1)
+  for (int var1 = 0, n = variables.size(); var1 < n; ++var1)
     fact_to_mutexes[var1].resize(variables[var1].get_domain_size(),
                                  vector<pair<int, int>>());
 
@@ -24,7 +24,7 @@ void RegressionStateRegistry::init_mutex() {
 
           if (fact1.is_mutex(fact2)) {
             fact_to_mutexes[var1][value1].push_back(make_pair(var2, value2));
-            fact_to_mutexes[var2][value2].push_back(make_pair(var2, value2));
+            fact_to_mutexes[var2][value2].push_back(make_pair(var1, value1));
           }
         }
       }

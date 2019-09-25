@@ -23,11 +23,12 @@ void RegressionTask::init_mutex() {
                                  vector<FactPair>());
 
   for (int var1 = 0; var1 < get_num_variables(); ++var1) {
-    for (int value1 = 0; value1 < get_variable_domain_size(var1); ++value1) {
+    for (int value1 = 0; value1 < get_variable_domain_size(var1) - 1;
+         ++value1) {
       FactPair fact1(var1, value1);
 
       for (int var2 = var1 + 1; var2 < get_num_variables(); ++var2) {
-        for (int value2 = 0; value2 < get_variable_domain_size(var2);
+        for (int value2 = 0; value2 < get_variable_domain_size(var2) - 1;
              ++value2) {
           FactPair fact2(var2, value2);
 
@@ -48,9 +49,11 @@ void RegressionTask::reverse_operators() {
     throw runtime_error("Axiom is not supported.");
 
   vector<int> effect_var_values(get_num_variables());
+  vector<int> precondition_var_values(get_num_variables());
 
   for (int i = 0; i < parent->get_num_operators(); ++i) {
     fill(effect_var_values.begin(), effect_var_values.end(), -1);
+    fill(precondition_var_values.begin(), precondition_var_values.end(), -1);
 
     vector<FactPair> new_preconditions;
     vector<FactPair> new_negative_preconditons;
@@ -70,6 +73,7 @@ void RegressionTask::reverse_operators() {
 
     for (int j = 0; j < parent->get_num_operator_preconditions(i, false); ++j) {
       FactPair fact = parent->get_operator_precondition(i, j, false);
+      precondition_var_values[fact.var] = fact.value;
 
       for (auto f : fact_to_mutexes[fact.var][fact.value])
         if (effect_var_values[f.var] != f.value)
@@ -81,6 +85,12 @@ void RegressionTask::reverse_operators() {
 
       new_effects.emplace_back(
           ExplicitEffect(fact.var, fact.value, move(vector<FactPair>())));
+    }
+
+    for (int var = 0, n = effect_var_values.size(); var < n; ++var) {
+      if (effect_var_values[var] != -1 && precondition_var_values[var] == -1)
+        new_effects.emplace_back(ExplicitEffect(
+            var, get_variable_domain_size(var) - 1, move(vector<FactPair>())));
     }
 
     vector<bool> is_negative(new_preconditions.size(), false);

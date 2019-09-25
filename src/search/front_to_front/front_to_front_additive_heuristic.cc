@@ -131,7 +131,9 @@ void FrontToFrontAdditiveHeuristic::precompute_exploration(const State &state) {
 }
 
 int FrontToFrontAdditiveHeuristic::compute_add_and_ff(const State &state) {
-  if (!regression) {
+  if (regression) {
+    for (Proposition &prop : propositions) prop.marked = false;
+  } else {
     setup_exploration_queue();
     setup_exploration_queue_state(state);
     relaxed_exploration();
