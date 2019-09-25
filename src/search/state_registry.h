@@ -154,6 +154,7 @@ class StateRegistry : public subscriber::SubscriberService<StateRegistry> {
   using StateIDSet =
       int_hash_set::IntHashSet<StateIDSemanticHash, StateIDSemanticEqual>;
 
+ protected:
   TaskProxy task_proxy;
   const int_packer::IntPacker &state_packer;
   AxiomEvaluator &axiom_evaluator;
@@ -168,9 +169,13 @@ class StateRegistry : public subscriber::SubscriberService<StateRegistry> {
   StateID insert_id_or_pop_state();
   int get_bins_per_state() const;
 
+  const PackedStateBin *get_packed_buffer(const GlobalState &state) const {
+    return state.get_packed_buffer();
+  }
+
  public:
   explicit StateRegistry(const TaskProxy &task_proxy);
-  ~StateRegistry();
+  virtual ~StateRegistry();
 
   const TaskProxy &get_task_proxy() const { return task_proxy; }
 

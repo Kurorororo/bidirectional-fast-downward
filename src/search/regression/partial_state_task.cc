@@ -53,6 +53,8 @@ int PartialStateTask::get_variable_default_axiom_value(int var) const {
 }
 
 string PartialStateTask::get_fact_name(const FactPair &fact) const {
+  if (fact.value == get_variable_domain_size(fact.var) - 1) return "<unknown>";
+
   return parent->get_fact_name(fact);
 }
 

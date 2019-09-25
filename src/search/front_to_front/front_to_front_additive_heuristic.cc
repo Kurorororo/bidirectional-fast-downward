@@ -15,8 +15,12 @@ namespace front_to_front_additive_heuristic {
 // construction and destruction
 FrontToFrontAdditiveHeuristic::FrontToFrontAdditiveHeuristic(
     const Options &opts)
-    : FrontToFrontRelaxationHeuristic(opts), did_write_overflow_warning(false) {
+    : FrontToFrontRelaxationHeuristic(opts),
+      did_write_overflow_warning(false),
+      regression(opts.get<bool>("regression")) {
   cout << "Initializing additive heuristic..." << endl;
+
+  if (regression) precompute_exploration(task_proxy.get_initial_state());
 }
 
 void FrontToFrontAdditiveHeuristic::write_overflow_warning() {
@@ -90,28 +94,50 @@ void FrontToFrontAdditiveHeuristic::mark_preferred_operators(const State &state,
     OpID op_id = goal->reached_by;
     if (op_id != NO_OP) {  // We have not yet chained back to a start node.
       UnaryOperator *unary_op = get_operator(op_id);
-      bool is_preferred = true;
       for (PropID precond : get_preconditions(op_id)) {
         mark_preferred_operators(state, precond);
-        if (get_proposition(precond)->reached_by != NO_OP) {
-          is_preferred = false;
-        }
       }
       int operator_no = unary_op->operator_no;
-      if (is_preferred && operator_no != -1) {
+      if (operator_no != -1) {
         // This is not an axiom.
         OperatorProxy op = task_proxy.get_operators()[operator_no];
-        assert(task_properties::is_applicable(op, state));
         set_preferred(op);
       }
     }
   }
 }
 
-int FrontToFrontAdditiveHeuristic::compute_add_and_ff(const State &state) {
+void FrontToFrontAdditiveHeuristic::precompute_exploration(const State &state) {
   setup_exploration_queue();
   setup_exploration_queue_state(state);
-  relaxed_exploration();
+
+  while (!queue.empty()) {
+    pair<int, PropID> top_pair = queue.pop();
+    int distance = top_pair.first;
+    PropID prop_id = top_pair.second;
+    Proposition *prop = get_proposition(prop_id);
+    int prop_cost = prop->cost;
+    assert(prop_cost >= 0);
+    assert(prop_cost <= distance);
+    if (prop_cost < distance) continue;
+    for (OpID op_id : precondition_of_pool.get_slice(
+             prop->precondition_of, prop->num_precondition_occurences)) {
+      UnaryOperator *unary_op = get_operator(op_id);
+      increase_cost(unary_op->cost, prop_cost);
+      --unary_op->unsatisfied_preconditions;
+      assert(unary_op->unsatisfied_preconditions >= 0);
+      if (unary_op->unsatisfied_preconditions == 0)
+        enqueue_if_necessary(unary_op->effect, unary_op->cost, op_id);
+    }
+  }
+}
+
+int FrontToFrontAdditiveHeuristic::compute_add_and_ff(const State &state) {
+  if (!regression) {
+    setup_exploration_queue();
+    setup_exploration_queue_state(state);
+    relaxed_exploration();
+  }
 
   int total_cost = 0;
   for (PropID goal_id : goal_propositions) {
@@ -164,6 +190,9 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("consistent", "no");
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
+
+  parser.add_option<bool>("regression",
+                          "cache initial state exploration results", "false");
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

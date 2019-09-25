@@ -26,22 +26,15 @@ void FrontToFrontFFHeuristic::mark_preferred_operators_and_relaxed_plan(
     OpID op_id = goal->reached_by;
     if (op_id != NO_OP) {  // We have not yet chained back to a start node.
       UnaryOperator *unary_op = get_operator(op_id);
-      bool is_preferred = true;
       for (PropID precond : get_preconditions(op_id)) {
         mark_preferred_operators_and_relaxed_plan(state, precond);
-        if (get_proposition(precond)->reached_by != NO_OP) {
-          is_preferred = false;
-        }
       }
       int operator_no = unary_op->operator_no;
       if (operator_no != -1) {
         // This is not an axiom.
         relaxed_plan[operator_no] = true;
-        if (is_preferred) {
-          OperatorProxy op = task_proxy.get_operators()[operator_no];
-          assert(task_properties::is_applicable(op, state));
-          set_preferred(op);
-        }
+        OperatorProxy op = task_proxy.get_operators()[operator_no];
+        set_preferred(op);
       }
     }
   }
@@ -94,6 +87,8 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("consistent", "no");
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
+  parser.add_option<bool>("regression",
+                          "cache initial state exploration results", "false");
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

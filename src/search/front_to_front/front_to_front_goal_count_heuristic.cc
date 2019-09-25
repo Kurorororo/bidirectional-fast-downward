@@ -18,12 +18,10 @@ int FrontToFrontGoalCountHeuristic::compute_heuristic(
   const State state = convert_global_state(global_state);
   int unsatisfied_goal_count = 0;
 
-  for (FactProxy goal : goal_state) {
-    const VariableProxy var = goal.get_variable();
-    if (state[var] != goal) {
-      ++unsatisfied_goal_count;
-    }
+  for (auto goal : current_goal) {
+    if (state.get_values()[goal.first] != goal.second) ++unsatisfied_goal_count;
   }
+
   return unsatisfied_goal_count;
 }
 

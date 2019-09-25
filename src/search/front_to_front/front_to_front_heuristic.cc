@@ -8,9 +8,9 @@ using namespace std;
 
 FrontToFrontHeuristic::FrontToFrontHeuristic(const Options &opts)
     : Evaluator(opts.get_unparsed_config(), true, true, true),
+      ignore_last(opts.get<bool>("ignore_last")),
       task(opts.get<shared_ptr<AbstractTask>>("transform")),
-      task_proxy(*task),
-      goal_state(task_proxy.get_initial_state()) {}
+      task_proxy(*task) {}
 
 FrontToFrontHeuristic::~FrontToFrontHeuristic() {}
 
@@ -24,7 +24,17 @@ State FrontToFrontHeuristic::convert_global_state(
 }
 
 void FrontToFrontHeuristic::set_goal(const GlobalState &global_state) {
-  goal_state = task_proxy.convert_ancestor_state(global_state.unpack());
+  auto goal_state = task_proxy.convert_ancestor_state(global_state.unpack());
+  current_goal.clear();
+
+  for (auto f : goal_state) {
+    VariableProxy var = f.get_variable();
+    int value = f.get_value();
+
+    if (!ignore_last || value < var.get_domain_size() - 1)
+      current_goal.emplace_back(
+          make_pair(f.get_variable().get_id(), f.get_value()));
+  }
 }
 
 void FrontToFrontHeuristic::add_options_to_parser(OptionParser &parser) {
@@ -33,8 +43,10 @@ void FrontToFrontHeuristic::add_options_to_parser(OptionParser &parser) {
       "Optional task transformation for the heuristic."
       " Currently, adapt_costs() and no_transform() are available.",
       "no_transform()");
-  parser.add_option<bool>("cache_estimates", "cache heuristic estimates",
-                          "true");
+  parser.add_option<bool>(
+      "ignore_last",
+      "ignore the last value in each variable domain (for partial task)",
+      "false");
 }
 
 EvaluationResult FrontToFrontHeuristic::compute_result(

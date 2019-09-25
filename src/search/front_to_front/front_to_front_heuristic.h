@@ -18,11 +18,12 @@ class Options;
 
 class FrontToFrontHeuristic : public Evaluator {
   ordered_set::OrderedSet<OperatorID> preferred_operators;
+  bool ignore_last;
 
  protected:
   const std::shared_ptr<AbstractTask> task;
   TaskProxy task_proxy;
-  State goal_state;
+  std::vector<std::pair<int, int>> current_goal;
 
   enum { DEAD_END = -1, NO_VALUE = -2 };
 

@@ -289,8 +289,8 @@ void FrontToFrontRelaxationHeuristic::do_set_goal() {
 
   goal_propositions.clear();
 
-  for (FactProxy goal : goal_state) {
-    PropID prop_id = get_prop_id(goal);
+  for (auto goal : current_goal) {
+    PropID prop_id = get_prop_id(goal.first, goal.second);
     propositions[prop_id].is_goal = true;
     goal_propositions.push_back(prop_id);
   }

@@ -108,6 +108,19 @@ RegressionTask::RegressionTask(const shared_ptr<AbstractTask> &parent)
   reverse_operators();
 }
 
+vector<int> RegressionTask::get_goal_state_values() const {
+  vector<int> values(get_num_variables());
+
+  for (int var = 0; var < get_num_variables(); ++var)
+    values[var] = get_variable_domain_size(var) - 1;
+
+  for (int i = 0; i < get_num_goals(); ++i) {
+    FactPair fact = get_goal_fact(i);
+    values[fact.var] = fact.value;
+  }
+
+  return values;
+}
 bool RegressionTask::is_negative_precondition(int op_index, int fact_index,
                                               bool is_axiom) const {
   return is_negative_precondition_vector[op_index][fact_index];

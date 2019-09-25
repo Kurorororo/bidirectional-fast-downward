@@ -33,7 +33,8 @@ static shared_ptr<AbstractTask> _parse(OptionParser &parser) {
   parser.add_option<shared_ptr<AbstractTask>>(
       "transform",
       "Optional task transformation."
-      " Currently, inverse() and no_transform() are available.",
+      " Currently, inverse(), partial_state(), and no_transform() are "
+      "available.",
       "no_transform()");
   Options opts = parser.parse();
   if (parser.dry_run()) {

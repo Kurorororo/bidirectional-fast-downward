@@ -785,6 +785,20 @@ fast_downward_plugin(
     DEPENDS BIDIRECTIONAL
 )
 
+fast_downward_plugin(
+    NAME REGRESSION
+    HELP "Plugin containing the code for regression search"
+    SOURCES
+        regression/regression_eager_search
+        regression/regression_successor_generator
+        regression/regression_successor_generator_factory
+        regression/regression_successor_generator_internals
+        regression/regression_state_registry
+        regression/regression_task
+        regression/partial_state_task
+    DEPENDS FRONT_TO_FRONT
+)
+
 fast_downward_add_plugin_sources(PLANNER_SOURCES)
 
 # The order in PLANNER_SOURCES influences the order in which object
