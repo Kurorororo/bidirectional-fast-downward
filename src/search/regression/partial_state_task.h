@@ -72,7 +72,7 @@ class PartialStateTask : public AbstractTask {
 
   static std::shared_ptr<AbstractTask> get_partial_state_task() {
     static std::shared_ptr<AbstractTask> task =
-        std::make_shared<AbstractTask>(g_root_task);
+        std::make_shared<PartialStateTask>(g_root_task);
 
     return task;
   }

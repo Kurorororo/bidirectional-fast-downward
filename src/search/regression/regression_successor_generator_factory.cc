@@ -20,6 +20,21 @@ struct RegressionPrecondition {
 
   RegressionPrecondition(const FactPair &fact, bool is_negative)
       : var(fact.var), value(fact.value), is_negative(is_negative ? 1 : 0) {}
+
+  bool operator<(const RegressionPrecondition &other) const {
+    return var < other.var || (var == other.var && value < other.var) ||
+           (value == other.value && is_negative < other.is_negative);
+  }
+
+  bool operator==(const RegressionPrecondition &other) const {
+    return var == other.var && value == other.value &&
+           is_negative == other.is_negative;
+  }
+
+  bool operator!=(const RegressionPrecondition &other) const {
+    return var != other.var || value != other.value ||
+           is_negative != other.is_negative;
+  }
 };
 
 struct RegressionOperatorRange {
@@ -57,7 +72,9 @@ class RegressionOperatorInfo {
     }
   }
 
-  bool is_negative(int depth) const { precondition[depth].is_negative == 1; }
+  bool is_negative(int depth) const {
+    return precondition[depth].is_negative == 1;
+  }
 };
 
 class RegressionOperatorGrouper {
@@ -134,6 +151,25 @@ GeneratorPtr RegressionSuccessorGeneratorFactory::construct_fork(
   }
 }
 
+GeneratorPtr RegressionSuccessorGeneratorFactory::construct_leaf(
+    RegressionOperatorRange range) const {
+  assert(!range.empty());
+  vector<OperatorID> operators;
+  operators.reserve(range.span());
+  while (range.begin != range.end) {
+    operators.emplace_back(operator_infos[range.begin].get_op());
+    ++range.begin;
+  }
+
+  if (operators.size() == 1) {
+    return utils::make_unique_ptr<successor_generator::GeneratorLeafSingle>(
+        operators.front());
+  } else {
+    return utils::make_unique_ptr<successor_generator::GeneratorLeafVector>(
+        move(operators));
+  }
+}
+
 GeneratorPtr RegressionSuccessorGeneratorFactory::construct_recursive(
     int depth, RegressionOperatorRange range) const {
   vector<GeneratorPtr> nodes;
@@ -161,8 +197,9 @@ GeneratorPtr RegressionSuccessorGeneratorFactory::construct_recursive(
         }
       }
 
-      nodes.push_back(utils::make_unique_ptr<GeneratorSwitchFact>(
-          fact, move(true_generator), move(false_generator)));
+      nodes.emplace_back(move(utils::make_unique_ptr<GeneratorSwitchFact>(
+          fact, task->get_variable_domain_size(fact.var) - 1,
+          move(true_generator), move(false_generator))));
     }
   }
   return construct_fork(move(nodes));

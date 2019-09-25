@@ -46,6 +46,8 @@ int FrontToFrontFFHeuristic::compute_heuristic(
   int h_add = compute_add_and_ff(state);
   bool reset_goal = false;
   if (h_add == DEAD_END) {
+    if (regression) return h_add;
+
     set_original_goal();
     h_add = compute_add_and_ff(state);
 
@@ -87,8 +89,6 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("consistent", "no");
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
-  parser.add_option<bool>("regression",
-                          "cache initial state exploration results", "false");
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

@@ -104,7 +104,8 @@ void RegressionTask::reverse_operators() {
 }
 
 RegressionTask::RegressionTask(const shared_ptr<AbstractTask> &parent)
-    : initial_state_values(parent->get_num_variables(), -1), parent(parent) {
+    : parent(parent) {
+  init_mutex();
   reverse_operators();
 }
 
@@ -209,12 +210,14 @@ int RegressionTask::convert_operator_index(
 
 int RegressionTask::get_num_axioms() const { return 0; }
 
-int RegressionTask::get_num_goals() const { return goals.size(); }
+int RegressionTask::get_num_goals() const { return parent->get_num_goals(); }
 
-FactPair RegressionTask::get_goal_fact(int index) const { return goals[index]; }
+FactPair RegressionTask::get_goal_fact(int index) const {
+  return parent->get_goal_fact(index);
+}
 
 vector<int> RegressionTask::get_initial_state_values() const {
-  return initial_state_values;
+  return parent->get_initial_state_values();
 }
 
 void RegressionTask::convert_state_values(

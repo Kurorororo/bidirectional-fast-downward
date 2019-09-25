@@ -8,7 +8,7 @@
 
 #include "../algorithms/ordered_set.h"
 #include "../front_to_front/front_to_front_open_list_factory.h"
-#include "../task_utils/successor_generator.h"
+#include "regression_successor_generator.h"
 
 #include "../utils/logging.h"
 
@@ -35,9 +35,7 @@ RegressionEagerSearch::RegressionEagerSearch(const Options &opts)
       partial_state_search_space(regression_state_registry),
       regression_task(tasks::RegressionTask::get_regression_task()),
       regression_task_proxy(*regression_task),
-      regression_successor_generator(
-          regression_successor_generator::RegressionSuccessorGenerator(
-              regression_task)) {}
+      regression_successor_generator(regression_task) {}
 
 void RegressionEagerSearch::initialize() {
   cout << "Conducting best first search"
@@ -273,7 +271,7 @@ void RegressionEagerSearch::reward_progress() {
 }
 
 void RegressionEagerSearch::dump_search_space() const {
-  partial_state_search_space.dump(partial_task_proxy);
+  partial_state_search_space.dump(partial_state_task_proxy);
 }
 
 void RegressionEagerSearch::start_f_value_statistics(

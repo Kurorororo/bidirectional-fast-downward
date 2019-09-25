@@ -17,7 +17,7 @@ void RegressionSuccessorGenerator::generate_applicable_ops(
   root->generate_applicable_ops(state, applicable_ops);
 }
 
-void regressionSuccessorGenerator::generate_applicable_ops(
+void RegressionSuccessorGenerator::generate_applicable_ops(
     const GlobalState &state, vector<OperatorID> &applicable_ops) const {
   root->generate_applicable_ops(state, applicable_ops);
 }

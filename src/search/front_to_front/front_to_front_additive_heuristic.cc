@@ -15,9 +15,7 @@ namespace front_to_front_additive_heuristic {
 // construction and destruction
 FrontToFrontAdditiveHeuristic::FrontToFrontAdditiveHeuristic(
     const Options &opts)
-    : FrontToFrontRelaxationHeuristic(opts),
-      did_write_overflow_warning(false),
-      regression(opts.get<bool>("regression")) {
+    : FrontToFrontRelaxationHeuristic(opts), did_write_overflow_warning(false) {
   cout << "Initializing additive heuristic..." << endl;
 
   if (regression) precompute_exploration(task_proxy.get_initial_state());
@@ -154,7 +152,7 @@ int FrontToFrontAdditiveHeuristic::compute_heuristic(const State &state) {
   if (h != DEAD_END) {
     for (PropID goal_id : goal_propositions)
       mark_preferred_operators(state, goal_id);
-  } else {
+  } else if (!regression) {
     set_original_goal();
     h = compute_add_and_ff(state);
 
@@ -190,9 +188,6 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("consistent", "no");
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
-
-  parser.add_option<bool>("regression",
-                          "cache initial state exploration results", "false");
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

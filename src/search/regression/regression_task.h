@@ -20,8 +20,6 @@ class OptionParser;
 namespace tasks {
 
 class RegressionTask : public AbstractTask {
-  vector<int> initial_state_values;
-  vector<FactPair> goals;
   vector<ExplicitOperator> operators;
   vector<vector<bool>> is_negative_precondition_vector;
   vector<vector<vector<FactPair>>> fact_to_mutexes;

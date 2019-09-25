@@ -18,9 +18,9 @@ class Options;
 
 class FrontToFrontHeuristic : public Evaluator {
   ordered_set::OrderedSet<OperatorID> preferred_operators;
-  bool ignore_last;
 
  protected:
+  bool regression;
   const std::shared_ptr<AbstractTask> task;
   TaskProxy task_proxy;
   std::vector<std::pair<int, int>> current_goal;
