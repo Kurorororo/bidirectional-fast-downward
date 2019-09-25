@@ -67,7 +67,7 @@ class FrontToFrontAdditiveHeuristic
   void precompute_exploration(const State &state);
 
  protected:
-  bool fall_back;
+  bool cache_initial;
 
   virtual int compute_heuristic(const GlobalState &global_state) override;
 

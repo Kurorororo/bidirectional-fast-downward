@@ -46,22 +46,34 @@ int FrontToFrontFFHeuristic::compute_heuristic(
   int h_add = compute_add_and_ff(state);
   bool reset_goal = false;
   if (h_add == DEAD_END) {
-    if (!fall_back) return h_add;
+    if (cache_initial) return h_add;
 
-    set_original_goal();
-    h_add = compute_add_and_ff(state);
+    if (regression) {
+      State initial_state = task_proxy.get_initial_state();
+      h_add = compute_add_and_ff(initial_state);
 
-    if (h_add == DEAD_END) {
-      do_set_goal();
-      return h_add;
+      if (h_add == DEAD_END) return h_add;
+
+      for (PropID goal_id : goal_propositions)
+        mark_preferred_operators_and_relaxed_plan(initial_state, goal_id);
+    } else {
+      set_original_goal();
+      h_add = compute_add_and_ff(state);
+
+      if (h_add == DEAD_END) {
+        do_set_goal();
+        return h_add;
+      }
+
+      reset_goal = true;
+
+      for (PropID goal_id : goal_propositions)
+        mark_preferred_operators_and_relaxed_plan(state, goal_id);
     }
-
-    reset_goal = true;
+  } else {
+    for (PropID goal_id : goal_propositions)
+      mark_preferred_operators_and_relaxed_plan(state, goal_id);
   }
-
-  // Collecting the relaxed plan also sets the preferred operators.
-  for (PropID goal_id : goal_propositions)
-    mark_preferred_operators_and_relaxed_plan(state, goal_id);
 
   int h_ff = 0;
   for (size_t op_no = 0; op_no < relaxed_plan.size(); ++op_no) {
@@ -89,8 +101,7 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("consistent", "no");
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
-  parser.add_option<bool>(
-      "fall_back", "fall back to the original goals if dead end", "true");
+  parser.add_option<bool>("cache_initial", "fix initial state", "false");
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();
