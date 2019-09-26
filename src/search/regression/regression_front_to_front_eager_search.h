@@ -38,6 +38,7 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   void start_f_value_statistics(Direction d, EvaluationContext &eval_context);
   void update_f_value_statistics(Direction d, EvaluationContext &eval_context);
   void reward_progress(Direction d);
+  bool check_goal_and_set_plan(const GlobalState &state);
   bool check_initial_and_set_plan(const GlobalState &state);
   SearchStatus forward_step(const tl::optional<SearchNode> &node);
   SearchStatus backward_step(const tl::optional<SearchNode> &node);

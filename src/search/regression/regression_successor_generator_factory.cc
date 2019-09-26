@@ -22,8 +22,9 @@ struct RegressionPrecondition {
       : var(fact.var), value(fact.value), is_negative(is_negative ? 1 : 0) {}
 
   bool operator<(const RegressionPrecondition &other) const {
-    return var < other.var || (var == other.var && value < other.var) ||
-           (value == other.value && is_negative < other.is_negative);
+    return var < other.var || (var == other.var && value < other.value) ||
+           (var == other.var && value == other.value &&
+            is_negative < other.is_negative);
   }
 
   bool operator==(const RegressionPrecondition &other) const {
@@ -68,9 +69,6 @@ class RegressionOperatorInfo {
     if (depth == static_cast<int>(precondition.size())) {
       return FactPair(-1, -1);
     } else {
-      // cout << "current depth=" << depth << " fact: " <<
-      // precondition[depth].var
-      //     << " " << precondition[depth].value << endl;
       return FactPair(precondition[depth].var, precondition[depth].value);
     }
   }
@@ -87,7 +85,6 @@ class RegressionOperatorGrouper {
 
   const RegressionOperatorInfo &get_current_op_info() const {
     assert(!range.empty());
-    // cout << "current_op=" << range.begin << endl;
     return operator_infos[range.begin];
   }
 
@@ -124,11 +121,9 @@ class RegressionOperatorGrouper {
     assert(!range.empty());
     bool key = get_current_is_negative();
     int group_begin = range.begin;
-    // cout << "start begin=" << range.begin << " end=" << range.end << endl;
     do {
       ++range.begin;
     } while (!range.empty() && get_current_is_negative() == key);
-    // cout << "end begin=" << range.begin << " end=" << range.end << endl;
     RegressionOperatorRange group_range(group_begin, range.begin);
     return make_pair(key, group_range);
   }
@@ -184,14 +179,8 @@ GeneratorPtr RegressionSuccessorGeneratorFactory::construct_recursive(
     auto fact_group = grouper_by_fact.next_by_fact();
     FactPair fact = fact_group.first;
     RegressionOperatorRange fact_range = fact_group.second;
-    // cout << "depth=" << depth << ", "
-    //     << "var" << fact.var << "=" << fact.value << endl;
-    // cout << "fact_range begin=" << fact_range.begin << " end=" <<
-    // fact_range.end
-    //     << endl;
 
     if (fact.var == -1) {
-      // cout << "leaf" << endl;
       nodes.push_back(construct_leaf(fact_range));
     } else {
       GeneratorPtr true_generator = nullptr;
@@ -202,10 +191,7 @@ GeneratorPtr RegressionSuccessorGeneratorFactory::construct_recursive(
       while (!grouper_by_is_negative.done()) {
         auto is_negative_group = grouper_by_is_negative.next_by_is_negative();
         bool is_negative = is_negative_group.first;
-        // cout << "depth=" << depth << " is_negative " << is_negative << endl;
         RegressionOperatorRange is_negative_range = is_negative_group.second;
-        // cout << "is_negative_range begin=" << fact_range.begin
-        //     << " end=" << fact_range.end << endl;
 
         if (is_negative) {
           false_generator = construct_recursive(depth + 1, is_negative_range);
@@ -217,9 +203,9 @@ GeneratorPtr RegressionSuccessorGeneratorFactory::construct_recursive(
       nodes.emplace_back(move(utils::make_unique_ptr<GeneratorSwitchFact>(
           fact, task->get_variable_domain_size(fact.var) - 1,
           move(true_generator), move(false_generator))));
-      // exit(1);
     }
   }
+
   return construct_fork(move(nodes));
 }
 
@@ -242,6 +228,7 @@ RegressionSuccessorGeneratorFactory::build_sorted_precondition(int op_index) {
 }
 
 GeneratorPtr RegressionSuccessorGeneratorFactory::create() {
+  cout << "creating regression successor generator" << endl;
   operator_infos.reserve(task->get_num_operators());
 
   for (int i = 0; i < task->get_num_operators(); ++i) {

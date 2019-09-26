@@ -7,6 +7,7 @@
 
 #include "../algorithms/ordered_set.h"
 #include "../task_utils/successor_generator.h"
+#include "../task_utils/task_properties.h"
 
 #include "../utils/logging.h"
 
@@ -220,6 +221,18 @@ void RegressionFrontToFrontEagerSearch::update_f_value_statistics(
     int f_value = eval_context.get_evaluator_value(f_evaluators[d].get());
     statistics.report_f_value_progress(f_value);
   }
+}
+
+bool RegressionFrontToFrontEagerSearch::check_goal_and_set_plan(
+    const GlobalState &state) {
+  if (task_properties::is_goal_state(task_proxy, state)) {
+    Plan plan;
+    partial_state_search_space.trace_path(state, plan);
+    set_plan(plan);
+    return true;
+  }
+
+  return false;
 }
 
 bool RegressionFrontToFrontEagerSearch::check_initial_and_set_plan(
