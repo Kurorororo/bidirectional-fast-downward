@@ -20,6 +20,7 @@ class FrontToFrontHeuristic : public Evaluator {
   ordered_set::OrderedSet<OperatorID> preferred_operators;
 
  protected:
+  bool partial_state;
   bool regression;
   const std::shared_ptr<AbstractTask> task;
   TaskProxy task_proxy;

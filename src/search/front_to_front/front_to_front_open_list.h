@@ -38,9 +38,12 @@ class FrontToFrontOpenList {
 
 using StateOpenListEntry = StateID;
 using EdgeOpenListEntry = std::pair<StateID, OperatorID>;
+using FrontierOpenListEntry = std::pair<StateID, StateID>;
 
 using FrontToFrontStateOpenList = FrontToFrontOpenList<StateOpenListEntry>;
 using FrontToFrontEdgeOpenList = FrontToFrontOpenList<EdgeOpenListEntry>;
+using FrontToFrontFrontierOpenList =
+    FrontToFrontOpenList<FrontierOpenListEntry>;
 
 template <class Entry>
 FrontToFrontOpenList<Entry>::FrontToFrontOpenList(bool only_preferred)

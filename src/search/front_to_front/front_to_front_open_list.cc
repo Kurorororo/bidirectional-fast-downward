@@ -16,6 +16,12 @@ FrontToFrontOpenListFactory::create_open_list() {
   return create_edge_open_list();
 }
 
+template <>
+unique_ptr<FrontToFrontFrontierOpenList>
+FrontToFrontOpenListFactory::create_open_list() {
+  return create_frontier_open_list();
+}
+
 static PluginTypePlugin<FrontToFrontOpenListFactory> _type_plugin(
     "FrontToFrontOpenList",
     // TODO: Replace empty string by synopsis for the wiki page.

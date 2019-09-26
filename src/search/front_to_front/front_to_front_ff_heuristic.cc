@@ -46,9 +46,7 @@ int FrontToFrontFFHeuristic::compute_heuristic(
   int h_add = compute_add_and_ff(state);
   bool reset_goal = false;
   if (h_add == DEAD_END) {
-    if (cache_initial) return h_add;
-
-    if (regression) {
+    if (fall_back_to == INITIAL) {
       State initial_state = task_proxy.get_initial_state();
       h_add = compute_add_and_ff(initial_state);
 
@@ -56,7 +54,7 @@ int FrontToFrontFFHeuristic::compute_heuristic(
 
       for (PropID goal_id : goal_propositions)
         mark_preferred_operators_and_relaxed_plan(initial_state, goal_id);
-    } else {
+    } else if (fall_back_to == GOAL) {
       set_original_goal();
       h_add = compute_add_and_ff(state);
 
@@ -102,6 +100,18 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
   parser.add_option<bool>("cache_initial", "fix initial state", "false");
+
+  vector<string> fall_back_to;
+  vector<string> fall_back_to_doc;
+  fall_back_to.push_back("NONE");
+  fall_back_to_doc.push_back("Do not fall back");
+  fall_back_to.push_back("INITIAL");
+  fall_back_to_doc.push_back("Use the initail state");
+  fall_back_to.push_back("GOAL");
+  fall_back_to_doc.push_back("Use the original goal");
+  parser.add_enum_option("fall_back_to", fall_back_to,
+                         "A state to fall back when dead ends.", "NONE",
+                         fall_back_to_doc);
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

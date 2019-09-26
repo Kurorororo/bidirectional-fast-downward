@@ -8,7 +8,7 @@ using namespace std;
 
 FrontToFrontHeuristic::FrontToFrontHeuristic(const Options &opts)
     : Evaluator(opts.get_unparsed_config(), true, true, true),
-      regression(opts.get<bool>("regression")),
+      regression(opts.get<bool>("partial_state")),
       task(opts.get<shared_ptr<AbstractTask>>("transform")),
       task_proxy(*task) {}
 
@@ -31,7 +31,7 @@ void FrontToFrontHeuristic::set_goal(const GlobalState &global_state) {
     VariableProxy var = f.get_variable();
     int value = f.get_value();
 
-    if (!regression || value < var.get_domain_size() - 1)
+    if (!partial_state || value < var.get_domain_size() - 1)
       current_goal.emplace_back(
           make_pair(f.get_variable().get_id(), f.get_value()));
   }
@@ -43,7 +43,7 @@ void FrontToFrontHeuristic::add_options_to_parser(OptionParser &parser) {
       "Optional task transformation for the heuristic."
       " Currently, adapt_costs() and no_transform() are available.",
       "no_transform()");
-  parser.add_option<bool>("regression", "do regression", "false");
+  parser.add_option<bool>("partial_state", "evaluate partial state", "false");
 }
 
 EvaluationResult FrontToFrontHeuristic::compute_result(

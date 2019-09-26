@@ -17,7 +17,8 @@ FrontToFrontAdditiveHeuristic::FrontToFrontAdditiveHeuristic(
     const Options &opts)
     : FrontToFrontRelaxationHeuristic(opts),
       did_write_overflow_warning(false),
-      cache_initial(opts.get<bool>("cache_initial")) {
+      cache_initial(opts.get<bool>("cache_initial")),
+      fall_back_to(FallBackTo(opts.get_enum("fall_back_to"))) {
   cout << "Initializing additive heuristic..." << endl;
 
   if (cache_initial) precompute_exploration(task_proxy.get_initial_state());
@@ -156,24 +157,22 @@ int FrontToFrontAdditiveHeuristic::compute_heuristic(const State &state) {
   if (h != DEAD_END) {
     for (PropID goal_id : goal_propositions)
       mark_preferred_operators(state, goal_id);
-  } else if (!cache_initial) {
-    if (regression) {
-      State initial_state = task_proxy.get_initial_state();
-      h = compute_add_and_ff(initial_state);
+  } else if (fall_back_to == INITIAL) {
+    State initial_state = task_proxy.get_initial_state();
+    h = compute_add_and_ff(initial_state);
 
-      if (h != DEAD_END)
-        for (PropID goal_id : goal_propositions)
-          mark_preferred_operators(initial_state, goal_id);
-    } else {
-      set_original_goal();
-      h = compute_add_and_ff(state);
+    if (h != DEAD_END)
+      for (PropID goal_id : goal_propositions)
+        mark_preferred_operators(initial_state, goal_id);
+  } else if (fall_back_to == GOAL) {
+    set_original_goal();
+    h = compute_add_and_ff(state);
 
-      if (h != DEAD_END)
-        for (PropID goal_id : goal_propositions)
-          mark_preferred_operators(state, goal_id);
+    if (h != DEAD_END)
+      for (PropID goal_id : goal_propositions)
+        mark_preferred_operators(state, goal_id);
 
-      do_set_goal();
-    }
+    do_set_goal();
   }
   return h;
 }
@@ -202,6 +201,18 @@ static shared_ptr<FrontToFrontHeuristic> _parse(OptionParser &parser) {
   parser.document_property("safe", "yes for tasks without axioms");
   parser.document_property("preferred operators", "yes");
   parser.add_option<bool>("cache_initial", "fix initial state", "false");
+
+  vector<string> fall_back_to;
+  vector<string> fall_back_to_doc;
+  fall_back_to.push_back("NONE");
+  fall_back_to_doc.push_back("Do not fall back");
+  fall_back_to.push_back("INITIAL");
+  fall_back_to_doc.push_back("Use the initail state");
+  fall_back_to.push_back("GOAL");
+  fall_back_to_doc.push_back("Use the original goal");
+  parser.add_enum_option("fall_back_to", fall_back_to,
+                         "A state to fall back when dead ends.", "NONE",
+                         fall_back_to_doc);
 
   FrontToFrontHeuristic::add_options_to_parser(parser);
   Options opts = parser.parse();

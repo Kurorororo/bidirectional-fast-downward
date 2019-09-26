@@ -66,8 +66,12 @@ class FrontToFrontAdditiveHeuristic
 
   void precompute_exploration(const State &state);
 
+ public:
+  enum FallBackTo { NONE = 0, INITIAL = 1, GOAL = 2 };
+
  protected:
   bool cache_initial;
+  FallBackTo fall_back_to;
 
   virtual int compute_heuristic(const GlobalState &global_state) override;
 
