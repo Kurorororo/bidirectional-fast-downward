@@ -22,6 +22,7 @@ void FrontToFrontFFHeuristic::mark_preferred_operators_and_relaxed_plan(
     const State &state, PropID goal_id) {
   Proposition *goal = get_proposition(goal_id);
   if (!goal->marked) {  // Only consider each subgoal once.
+    // cout << goal_id << " is not marked" << endl;
     goal->marked = true;
     OpID op_id = goal->reached_by;
     if (op_id != NO_OP) {  // We have not yet chained back to a start node.
@@ -37,6 +38,8 @@ void FrontToFrontFFHeuristic::mark_preferred_operators_and_relaxed_plan(
         set_preferred(op);
       }
     }
+  } else {
+    // cout << goal_id << " is marked" << endl;
   }
 }
 
@@ -45,6 +48,7 @@ int FrontToFrontFFHeuristic::compute_heuristic(
   State state = convert_global_state(global_state);
   int h_add = compute_add_and_ff(state);
   bool reset_goal = false;
+
   if (h_add == DEAD_END) {
     if (fall_back_to == INITIAL) {
       State initial_state = task_proxy.get_initial_state();
@@ -67,10 +71,14 @@ int FrontToFrontFFHeuristic::compute_heuristic(
 
       for (PropID goal_id : goal_propositions)
         mark_preferred_operators_and_relaxed_plan(state, goal_id);
+    } else {
+      return h_add;
     }
   } else {
+    // cout << "start marking" << endl;
     for (PropID goal_id : goal_propositions)
       mark_preferred_operators_and_relaxed_plan(state, goal_id);
+    // cout << "end marking" << endl;
   }
 
   int h_ff = 0;
