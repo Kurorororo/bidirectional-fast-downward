@@ -109,31 +109,33 @@ void RegressionFrontToFrontEagerSearch::initialize() {
     operator.
   */
   open_lists[Direction::FORWARD]->set_goal(global_goal_state);
-  EvaluationContext eval_context(initial_state, 0, true, &statistics);
+  EvaluationContext eval_context_f(initial_state, 0, true, &statistics);
 
   statistics.inc_evaluated_states();
 
-  if (open_lists[Direction::FORWARD]->is_dead_end(eval_context)) {
+  if (open_lists[Direction::FORWARD]->is_dead_end(eval_context_f)) {
     cout << "Initial state is a dead end." << endl;
   } else {
-    if (search_progress.check_progress(eval_context)) {
+    if (search_progress.check_progress(eval_context_f)) {
       statistics.print_checkpoint_line(0);
     }
-    start_f_value_statistics(Direction::FORWARD, eval_context);
+    start_f_value_statistics(Direction::FORWARD, eval_context_f);
     SearchNode node_f = partial_state_search_space.get_node(initial_state);
     node_f.open_initial();
 
-    open_lists[Direction::FORWARD]->insert(eval_context,
+    open_lists[Direction::FORWARD]->insert(eval_context_f,
                                            initial_state.get_id());
   }
 
   SearchNode node_b = partial_state_search_space.get_node(global_goal_state);
   node_b.open_initial();
 
-  open_lists[Direction::BACKWARD]->insert(eval_context,
+  open_lists[Direction::BACKWARD]->set_goal(global_goal_state);
+  EvaluationContext eval_context_b(initial_state, 0, true, &statistics);
+  open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                           global_goal_state.get_id());
 
-  print_initial_evaluator_values(eval_context);
+  print_initial_evaluator_values(eval_context_b);
 }
 
 void RegressionFrontToFrontEagerSearch::print_statistics() const {
