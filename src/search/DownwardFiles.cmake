@@ -142,6 +142,13 @@ fast_downward_plugin(
 )
 
 fast_downward_plugin(
+    NAME LIFO_OPEN_LIST
+    HELP "Open list that selects the best element according to a single evaluation function using LIFO tie-breaking strategy"
+    SOURCES
+        open_lists/lifo_open_list
+)
+
+fast_downward_plugin(
     NAME EPSILON_GREEDY_OPEN_LIST
     HELP "Open list that chooses an entry randomly with probability epsilon"
     SOURCES
@@ -775,12 +782,16 @@ fast_downward_plugin(
     SOURCES
         front_to_front/plugin_front_to_front_eager_greedy
         front_to_front/front_to_front_eager_search
+        front_to_front/front_to_front_tiebreaking_open_list
+        front_to_front/front_to_front_lifo_open_list
         front_to_front/front_to_front_best_first_open_list
         front_to_front/front_to_front_open_list
         front_to_front/front_to_front_ff_heuristic
         front_to_front/front_to_front_additive_heuristic
         front_to_front/front_to_front_relaxation_heuristic
         front_to_front/front_to_front_goal_count_heuristic
+        front_to_front/front_to_front_greater
+        front_to_front/front_to_front_g_evaluator
         front_to_front/front_to_front_heuristic
     DEPENDS BIDIRECTIONAL
 )

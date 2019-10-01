@@ -113,7 +113,6 @@ void EagerSFBS::print_statistics() const {
 SearchStatus EagerSFBS::step() {
   tl::optional<SearchNode> n_f;
   tl::optional<SearchNode> n_b;
-
   while (true) {
     if (open_list->empty()) {
       cout << "Completely explored state space -- no solution!" << endl;
@@ -224,6 +223,8 @@ SearchStatus EagerSFBS::forward_step(const tl::optional<SearchNode> &n_f,
     GlobalState succ_state =
         regression_state_registry.get_successor_state(s_f, op);
 
+    if (succ_state.get_id() == n_f->get_parent_state_id()) continue;
+
     statistics.inc_generated();
     bool is_preferred = preferred_operators.contains(op_id);
 
@@ -264,6 +265,7 @@ SearchStatus EagerSFBS::forward_step(const tl::optional<SearchNode> &n_f,
 
       open_list->insert(succ_eval_context,
                         make_pair(succ_state.get_id(), s_b.get_id()));
+
       if (search_progress.check_progress(succ_eval_context)) {
         statistics.print_checkpoint_line(succ_node.get_g());
         reward_progress();
@@ -317,7 +319,9 @@ SearchStatus EagerSFBS::backward_step(const tl::optional<SearchNode> &n_f,
     StateID pre_state_id =
         regression_state_registry.get_predecessor_state(s_b, op);
 
-    if (pre_state_id == StateID::no_state) continue;
+    if (pre_state_id == StateID::no_state ||
+        pre_state_id == n_b->get_parent_state_id())
+      continue;
 
     GlobalState pre_state =
         regression_state_registry.lookup_state(pre_state_id);
