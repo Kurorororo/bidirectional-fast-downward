@@ -3,14 +3,28 @@
 #include "../option_parser.h"
 #include "../plugin.h"
 #include "../tasks/cost_adapted_task.h"
+#include "../tasks/root_task.h"
 
 using namespace std;
 
+FrontToFrontHeuristic::FrontToFrontHeuristic()
+    : cache_goal(false),
+      partial_state(false),
+      task(tasks::g_root_task),
+      task_proxy(*task) {
+  for (auto g : task_proxy.get_goals())
+    current_goal.push_back(make_pair(g.get_variable().get_id(), g.get_value()));
+}
+
 FrontToFrontHeuristic::FrontToFrontHeuristic(const Options &opts)
     : Evaluator(opts.get_unparsed_config(), true, true, true),
+      cache_goal(opts.get<bool>("cache_goal")),
       partial_state(opts.get<bool>("partial_state")),
       task(opts.get<shared_ptr<AbstractTask>>("transform")),
-      task_proxy(*task) {}
+      task_proxy(*task) {
+  for (auto g : task_proxy.get_goals())
+    current_goal.push_back(make_pair(g.get_variable().get_id(), g.get_value()));
+}
 
 FrontToFrontHeuristic::~FrontToFrontHeuristic() {}
 
@@ -24,6 +38,8 @@ State FrontToFrontHeuristic::convert_global_state(
 }
 
 void FrontToFrontHeuristic::set_goal(const GlobalState &global_state) {
+  if (cache_goal) return;
+
   auto goal_state = task_proxy.convert_ancestor_state(global_state.unpack());
   current_goal.clear();
 
@@ -44,6 +60,7 @@ void FrontToFrontHeuristic::add_options_to_parser(OptionParser &parser) {
       " Currently, adapt_costs() and no_transform() are available.",
       "no_transform()");
   parser.add_option<bool>("partial_state", "evaluate partial state", "false");
+  parser.add_option<bool>("cache_goal", "cache the original goal", "false");
 }
 
 EvaluationResult FrontToFrontHeuristic::compute_result(

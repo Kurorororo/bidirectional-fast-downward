@@ -791,6 +791,8 @@ fast_downward_plugin(
         front_to_front/front_to_front_relaxation_heuristic
         front_to_front/front_to_front_goal_count_heuristic
         front_to_front/front_to_front_greater
+        front_to_front/front_to_front_sum_evaluator
+        front_to_front/front_to_front_combining_evaluator
         front_to_front/front_to_front_g_evaluator
         front_to_front/front_to_front_heuristic
     DEPENDS BIDIRECTIONAL

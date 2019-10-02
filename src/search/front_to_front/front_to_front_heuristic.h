@@ -20,6 +20,7 @@ class FrontToFrontHeuristic : public Evaluator {
   ordered_set::OrderedSet<OperatorID> preferred_operators;
 
  protected:
+  bool cache_goal;
   bool partial_state;
   const std::shared_ptr<AbstractTask> task;
   TaskProxy task_proxy;
@@ -34,6 +35,8 @@ class FrontToFrontHeuristic : public Evaluator {
   State convert_global_state(const GlobalState &global_state) const;
 
  public:
+  FrontToFrontHeuristic();
+
   explicit FrontToFrontHeuristic(const options::Options &opts);
   virtual ~FrontToFrontHeuristic() override;
 

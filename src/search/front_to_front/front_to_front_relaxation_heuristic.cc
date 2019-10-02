@@ -297,6 +297,8 @@ void FrontToFrontRelaxationHeuristic::do_set_goal() {
 }
 
 void FrontToFrontRelaxationHeuristic::set_goal(const GlobalState &state) {
+  if (cache_goal) return;
+
   FrontToFrontHeuristic::set_goal(state);
   do_set_goal();
 }
