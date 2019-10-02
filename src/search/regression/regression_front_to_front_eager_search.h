@@ -40,6 +40,10 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   void reward_progress(Direction d);
   bool check_goal_and_set_plan(const GlobalState &state);
   bool check_initial_and_set_plan(const GlobalState &state);
+  bool check_meeting_and_set_plan(const GlobalState &s_f,
+                                  const GlobalState &s_b);
+  void meet_set_plan(Direction d, const GlobalState &s_f, OperatorID op_id,
+                     const GlobalState &s_b);
   SearchStatus forward_step(const tl::optional<SearchNode> &node);
   SearchStatus backward_step(const tl::optional<SearchNode> &node);
 

@@ -8,7 +8,7 @@ using namespace std;
 
 FrontToFrontHeuristic::FrontToFrontHeuristic(const Options &opts)
     : Evaluator(opts.get_unparsed_config(), true, true, true),
-      regression(opts.get<bool>("partial_state")),
+      partial_state(opts.get<bool>("partial_state")),
       task(opts.get<shared_ptr<AbstractTask>>("transform")),
       task_proxy(*task) {}
 

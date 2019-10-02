@@ -96,7 +96,7 @@ void RegressionFrontToFrontEagerSearch::initialize() {
 
   vector<int> goal_state_values = regression_task->get_goal_state_values();
   State goal_state =
-      partial_state_task_proxy.create_state(move(goal_state_values));
+      regression_task_proxy.create_state(move(goal_state_values));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
   for (Evaluator *evaluator : path_dependent_evaluators[Direction::BACKWARD]) {
@@ -127,13 +127,21 @@ void RegressionFrontToFrontEagerSearch::initialize() {
                                            initial_state.get_id());
   }
 
-  SearchNode node_b = partial_state_search_space.get_node(global_goal_state);
-  node_b.open_initial();
-
   open_lists[Direction::BACKWARD]->set_goal(global_goal_state);
   EvaluationContext eval_context_b(initial_state, 0, true, &statistics);
-  open_lists[Direction::BACKWARD]->insert(eval_context_b,
-                                          global_goal_state.get_id());
+
+  statistics.inc_evaluated_states();
+
+  if (open_lists[Direction::BACKWARD]->is_dead_end(eval_context_b)) {
+    cout << "Goal state is a dead end" << endl;
+  } else {
+    start_f_value_statistics(Direction::BACKWARD, eval_context_b);
+    SearchNode node_b = partial_state_search_space.get_node(global_goal_state);
+    node_b.open_initial();
+
+    open_lists[Direction::BACKWARD]->insert(eval_context_b,
+                                            global_goal_state.get_id());
+  }
 
   print_initial_evaluator_values(eval_context_b);
 }
@@ -285,6 +293,9 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
     auto other_top = open_lists[Direction::BACKWARD]->get_min_value_and_entry();
     GlobalState frontier_state =
         regression_state_registry.lookup_state(other_top.second);
+
+    if (check_meeting_and_set_plan(state, frontier_state)) return SOLVED;
+
     open_lists[Direction::FORWARD]->set_goal(frontier_state);
   }
 
@@ -303,9 +314,10 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
       evaluator->notify_state_transition(state, op_id, succ_state);
     }
 
-    if (check_meeting_and_set_plan(Direction::FORWARD, state, op_id,
-                                   succ_state))
+    if (!succ_node.is_new() && directions[succ_state] == BACKWARD) {
+      meet_set_plan(FORWARD, state, op_id, succ_state);
       return SOLVED;
+    }
 
     if (succ_node.is_dead_end()) continue;
 
@@ -369,6 +381,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
   if (!open_lists[Direction::FORWARD]->empty()) {
     auto other_top = open_lists[Direction::FORWARD]->get_min_value_and_entry();
     frontier_state = regression_state_registry.lookup_state(other_top.second);
+    if (check_meeting_and_set_plan(frontier_state, state)) return SOLVED;
   }
 
   open_lists[Direction::BACKWARD]->set_goal(state);
@@ -402,9 +415,10 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
       evaluator->notify_state_transition(pre_state, op_id, state);
     }
 
-    if (check_meeting_and_set_plan(Direction::BACKWARD, state, op_id,
-                                   pre_state))
+    if (!pre_node.is_new() && directions[pre_state] == FORWARD) {
+      meet_set_plan(BACKWARD, pre_state, op_id, state);
       return SOLVED;
+    }
 
     if (pre_node.is_dead_end()) continue;
 
@@ -452,39 +466,48 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
 }
 
 bool RegressionFrontToFrontEagerSearch::check_meeting_and_set_plan(
-    Direction d, const GlobalState &parent, OperatorID op_id,
-    const GlobalState &state) {
-  SearchNode node = partial_state_search_space.get_node(state);
+    const GlobalState &s_f, const GlobalState &s_b) {
+  VariablesProxy variables = partial_state_task_proxy.get_variables();
 
-  if (!node.is_new() && directions[state] != Direction::NONE &&
-      directions[state] != d) {
-    cout << "Solution found!" << endl;
-
-    Plan plan1;
-    partial_state_search_space.trace_path(state, plan1);
-    Plan plan2;
-    partial_state_search_space.trace_path(parent, plan2);
-
-    if (d == Direction::FORWARD) {
-      cout << "#forward actions: " << plan2.size() + 1 << endl;
-      cout << "#backward actions: " << plan1.size() << endl;
-      reverse(plan1.begin(), plan1.end());
-      plan2.push_back(op_id);
-      plan2.insert(plan2.end(), plan1.begin(), plan1.end());
-      set_plan(plan2);
-    } else {
-      cout << "#forward actions: " << plan1.size() << endl;
-      cout << "#backward actions: " << plan2.size() + 1 << endl;
-      reverse(plan2.begin(), plan2.end());
-      plan1.push_back(op_id);
-      plan1.insert(plan1.end(), plan2.begin(), plan2.end());
-      set_plan(plan1);
+  for (auto var : variables) {
+    if (s_b[var.get_id()] != var.get_domain_size() - 1 &&
+        s_f[var.get_id()] != s_b[var.get_id()]) {
+      return false;
     }
-
-    return true;
   }
 
-  return false;
+  Plan plan;
+  partial_state_search_space.trace_path(s_f, plan);
+  cout << "#forward actions: " << plan.size() << endl;
+  Plan regression_plan;
+  partial_state_search_space.trace_path(s_b, regression_plan);
+  reverse(regression_plan.begin(), regression_plan.end());
+  cout << "#backward actions: " << regression_plan.size() << endl;
+  plan.insert(plan.end(), regression_plan.begin(), regression_plan.end());
+  set_plan(plan);
+
+  return true;
+}
+
+void RegressionFrontToFrontEagerSearch::meet_set_plan(Direction d,
+                                                      const GlobalState &s_f,
+                                                      OperatorID op_id,
+                                                      const GlobalState &s_b) {
+  Plan plan;
+  partial_state_search_space.trace_path(s_f, plan);
+
+  if (d == Direction::FORWARD) plan.push_back(op_id);
+
+  cout << "#forward actions: " << plan.size() << endl;
+  Plan regression_plan;
+  partial_state_search_space.trace_path(s_b, regression_plan);
+
+  if (d == Direction::BACKWARD) regression_plan.push_back(op_id);
+
+  reverse(regression_plan.begin(), regression_plan.end());
+  cout << "#backward actions: " << regression_plan.size() << endl;
+  plan.insert(plan.end(), regression_plan.begin(), regression_plan.end());
+  set_plan(plan);
 }
 
 void add_options_to_parser(OptionParser &parser) {

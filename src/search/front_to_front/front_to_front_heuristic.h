@@ -21,7 +21,6 @@ class FrontToFrontHeuristic : public Evaluator {
 
  protected:
   bool partial_state;
-  bool regression;
   const std::shared_ptr<AbstractTask> task;
   TaskProxy task_proxy;
   std::vector<std::pair<int, int>> current_goal;
