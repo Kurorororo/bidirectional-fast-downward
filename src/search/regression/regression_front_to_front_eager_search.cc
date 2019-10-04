@@ -24,6 +24,8 @@ RegressionFrontToFrontEagerSearch::RegressionFrontToFrontEagerSearch(
     const Options &opts)
     : SearchEngine(opts),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
+      jump_policy(JumpPolicy(opts.get_enum("jump"))),
+      threshold(opts.get<int>("threshold")),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -125,6 +127,8 @@ void RegressionFrontToFrontEagerSearch::initialize() {
 
     open_lists[Direction::FORWARD]->insert(eval_context_f,
                                            initial_state.get_id());
+    successor_generator.generate_applicable_ops(initial_state,
+                                                forward_applicable_ops);
   }
 
   open_lists[Direction::BACKWARD]->set_goal(global_goal_state);
@@ -141,7 +145,15 @@ void RegressionFrontToFrontEagerSearch::initialize() {
 
     open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                             global_goal_state.get_id());
+    regression_successor_generator.generate_applicable_ops(
+        global_goal_state, backward_applicable_ops);
   }
+
+  if (jump_policy == ACTION)
+    current_direction =
+        forward_applicable_ops.size() <= backward_applicable_ops.size()
+            ? FORWARD
+            : BACKWARD;
 
   print_initial_evaluator_values(eval_context_b);
 }
@@ -173,7 +185,33 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
     GlobalState s = regression_state_registry.lookup_state(id);
     node.emplace(partial_state_search_space.get_node(s));
 
-    if (node->is_closed()) continue;
+    if (node->is_closed()) {
+      if (current_direction == Direction::FORWARD) {
+        forward_applicable_ops.clear();
+        if (!open_lists[current_direction]->empty()) {
+          successor_generator.generate_applicable_ops(s,
+                                                      forward_applicable_ops);
+
+          if (backward_applicable_ops.size() <=
+              threshold * forward_applicable_ops.size())
+            current_direction = BACKWARD;
+        }
+      }
+
+      if (current_direction == Direction::BACKWARD) {
+        backward_applicable_ops.clear();
+        if (!open_lists[current_direction]->empty()) {
+          regression_successor_generator.generate_applicable_ops(
+              s, backward_applicable_ops);
+
+          if (forward_applicable_ops.size() <=
+              threshold * backward_applicable_ops.size())
+            current_direction = FORWARD;
+        }
+      }
+
+      continue;
+    }
 
     /*
       We can pass calculate_preferred=false here since preferred
@@ -195,10 +233,6 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
   } else {
     status = backward_step(node);
   }
-
-  current_direction = current_direction == Direction::FORWARD
-                          ? Direction::BACKWARD
-                          : Direction::FORWARD;
 
   return status;
 }
@@ -276,9 +310,6 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
     return SOLVED;
   }
 
-  vector<OperatorID> applicable_ops;
-  successor_generator.generate_applicable_ops(state, applicable_ops);
-
   ordered_set::OrderedSet<OperatorID> preferred_operators;
   EvaluationContext eval_context(state, node->get_g(), false, &statistics,
                                  true);
@@ -299,7 +330,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
     open_lists[Direction::FORWARD]->set_goal(frontier_state);
   }
 
-  for (OperatorID op_id : applicable_ops) {
+  for (OperatorID op_id : forward_applicable_ops) {
     OperatorProxy op = task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 
@@ -359,6 +390,22 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
     }
   }
 
+  forward_applicable_ops.clear();
+
+  if (!open_lists[Direction::FORWARD]->empty()) {
+    auto top = open_lists[Direction::FORWARD]->get_min_value_and_entry();
+    StateID top_state_id = top.second;
+    GlobalState top_state =
+        regression_state_registry.lookup_state(top_state_id);
+    successor_generator.generate_applicable_ops(top_state,
+                                                forward_applicable_ops);
+  }
+
+  if (jump_policy == INTERLEAVING ||
+      backward_applicable_ops.size() <=
+          threshold * forward_applicable_ops.size())
+    current_direction = BACKWARD;
+
   return IN_PROGRESS;
 }
 
@@ -371,9 +418,6 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
     cout << "#backward actions: " << get_plan().size() << endl;
     return SOLVED;
   }
-
-  vector<OperatorID> applicable_ops;
-  regression_successor_generator.generate_applicable_ops(state, applicable_ops);
 
   ordered_set::OrderedSet<OperatorID> preferred_operators;
 
@@ -394,7 +438,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
         eval_context, preferred_operator_evaluator.get(), preferred_operators);
   }
 
-  for (OperatorID op_id : applicable_ops) {
+  for (OperatorID op_id : backward_applicable_ops) {
     OperatorProxy op = regression_task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 
@@ -461,6 +505,22 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
       }
     }
   }
+
+  backward_applicable_ops.clear();
+
+  if (!open_lists[Direction::BACKWARD]->empty()) {
+    auto top = open_lists[Direction::BACKWARD]->get_min_value_and_entry();
+    StateID top_state_id = top.second;
+    GlobalState top_state =
+        regression_state_registry.lookup_state(top_state_id);
+    regression_successor_generator.generate_applicable_ops(
+        top_state, backward_applicable_ops);
+  }
+
+  if (jump_policy == INTERLEAVING ||
+      forward_applicable_ops.size() <=
+          threshold * backward_applicable_ops.size())
+    current_direction = FORWARD;
 
   return IN_PROGRESS;
 }

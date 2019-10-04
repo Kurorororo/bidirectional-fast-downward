@@ -48,6 +48,10 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   SearchStatus backward_step(const tl::optional<SearchNode> &node);
 
  protected:
+  enum JumpPolicy { INTERLEAVING = 0, ACTION = 1 };
+
+  JumpPolicy jump_policy;
+  int threshold;
   const std::shared_ptr<AbstractTask> partial_state_task;
   TaskProxy partial_state_task_proxy;
   RegressionStateRegistry regression_state_registry;
@@ -58,6 +62,8 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
       regression_successor_generator;
   Direction current_direction;
   PerStateInformation<Direction> directions;
+  std::vector<OperatorID> forward_applicable_ops;
+  std::vector<OperatorID> backward_applicable_ops;
 
   virtual void initialize() override;
   virtual SearchStatus step() override;

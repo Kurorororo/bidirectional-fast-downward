@@ -36,6 +36,19 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>(
       "preferred_b", "use backward preferred operators of these evaluators",
       "[]");
+  parser.add_option<int>(
+      "threshold", "threashold to decide direction (when jump=ACTION)", "0");
+
+  vector<string> jump_policies;
+  vector<string> jump_policies_doc;
+  jump_policies.push_back("INTERLEAVING");
+  jump_policies_doc.push_back("interleave forward and regression");
+  jump_policies.push_back("ACTION");
+  jump_policies_doc.push_back(
+      "switch to the other direction when the number of successors in the "
+      "direction becomes equal to or more than that in the other direction.");
+  parser.add_enum_option("jump", jump_policies, "jump policy", "INTERLEAVING",
+                         jump_policies_doc);
 
   regression_front_to_front_eager_search::add_options_to_parser(parser);
   Options opts = parser.parse();
