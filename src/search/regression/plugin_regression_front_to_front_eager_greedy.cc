@@ -43,7 +43,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   reevals_doc.push_back("never do reevaluation");
   reevals.push_back("ALWAYS");
   reevals_doc.push_back("always do reevaluation");
-  reevals.push_back("NO_PARENT");
+  reevals.push_back("NOT_PARENT");
   reevals_doc.push_back(
       "do reevaluation when the pair is not the parent of the frontier state");
   parser.add_enum_option("reeval", reevals, "reevalution", "NEVER",
