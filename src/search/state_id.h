@@ -18,10 +18,8 @@ class StateID {
   int value;
   explicit StateID(int value_) : value(value_) {}
 
-  // No implementation to prevent default construction
-  StateID();
-
  public:
+  StateID() : value(-1) {}
   ~StateID() {}
 
   static const StateID no_state;

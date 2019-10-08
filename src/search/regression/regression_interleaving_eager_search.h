@@ -1,5 +1,5 @@
-#ifndef REGRESSION_FRONT_TO_FRONT_EAGER_SEARCH_H
-#define REGRESSION_FRONT_TO_FRONT_EAGER_SEARCH_H
+#ifndef REGRESSION_INTERLEAVING_EAGER_SEARCH_H
+#define REGRESSION_INTERLEAVING_EAGER_SEARCH_H
 
 #include "../bidirectional/bidirectional_search.h"
 #include "../front_to_front/front_to_front_heuristic.h"
@@ -19,8 +19,8 @@ class OptionParser;
 class Options;
 }  // namespace options
 
-namespace regression_front_to_front_eager_search {
-class RegressionFrontToFrontEagerSearch : public SearchEngine {
+namespace regression_interleaving_eager_search {
+class RegressionInterleavingEagerSearch : public SearchEngine {
   enum Direction { NONE = 0, FORWARD = 1, BACKWARD = 2 };
 
   const bool reopen_closed_nodes;
@@ -48,9 +48,6 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   SearchStatus backward_step(const tl::optional<SearchNode> &node);
 
  protected:
-  enum Reevaluation { NEVER = 0, ALWAYS = 1, NOT_PARENT = 2 };
-
-  Reevaluation reevaluation;
   const std::shared_ptr<AbstractTask> partial_state_task;
   TaskProxy partial_state_task_proxy;
   RegressionStateRegistry regression_state_registry;
@@ -59,7 +56,6 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   TaskProxy regression_task_proxy;
   regression_successor_generator::RegressionSuccessorGenerator
       regression_successor_generator;
-  PerStateInformation<StateID> pair_states;
   Direction current_direction;
   PerStateInformation<Direction> directions;
 
@@ -70,8 +66,8 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
                                   OperatorID op_id, const GlobalState &state);
 
  public:
-  explicit RegressionFrontToFrontEagerSearch(const options::Options &opts);
-  virtual ~RegressionFrontToFrontEagerSearch() = default;
+  explicit RegressionInterleavingEagerSearch(const options::Options &opts);
+  virtual ~RegressionInterleavingEagerSearch() = default;
 
   virtual void print_statistics() const override;
 
@@ -79,6 +75,6 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
 };
 
 extern void add_options_to_parser(options::OptionParser &parser);
-}  // namespace regression_front_to_front_eager_search
+}  // namespace regression_interleaving_eager_search
 
 #endif
