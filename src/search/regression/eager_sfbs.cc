@@ -346,6 +346,11 @@ SearchStatus EagerSFBS::backward_step(const tl::optional<SearchNode> &n_f,
     GlobalState pre_state =
         regression_state_registry.lookup_state(pre_state_id);
     statistics.inc_generated();
+
+    if (prune_goal && task_properties::is_goal_state(task_proxy, pre_state)) {
+      continue;
+    }
+
     bool is_preferred = preferred_operators.contains(op_id);
 
     SearchNode pre_node = partial_state_search_space.get_node(pre_state);

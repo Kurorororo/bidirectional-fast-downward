@@ -102,16 +102,6 @@ void RegressionFrontToFrontEagerSearch::initialize() {
   State goal_state = regression_task_proxy.create_state(move(to_be_moved));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
-  VariablesProxy variables = regression_task_proxy.get_variables();
-  int n_undefined = 0;
-
-  for (int i = 0; i < variables.size(); ++i) {
-    if (global_goal_state[i] == variables[i].get_domain_size() - 1) {
-      ++n_undefined;
-    }
-  }
-
-  cout << "undefiend: " << n_undefined << "/" << variables.size() << endl;
 
   for (Evaluator *evaluator : path_dependent_evaluators[Direction::BACKWARD]) {
     evaluator->notify_initial_state(initial_state);
@@ -485,11 +475,6 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
   vector<OperatorID> applicable_ops;
   regression_successor_generator.generate_applicable_ops(state, applicable_ops);
 
-  // if (prune_goal && !is_initial &&
-  //    task_properties::is_goal_state(task_proxy, state)) {
-  //  cout << "state is goal" << endl;
-  //}
-
   bool do_predecessor_pruning = prune_goal && is_initial;
   if (is_initial) is_initial = false;
 
@@ -520,6 +505,11 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
     GlobalState pre_state =
         regression_state_registry.lookup_state(pre_state_id);
     statistics.inc_generated();
+
+    if (prune_goal && task_properties::is_goal_state(task_proxy, pre_state)) {
+      continue;
+    }
+
     bool is_preferred = preferred_operators.contains(op_id);
 
     SearchNode pre_node = partial_state_search_space.get_node(pre_state);
