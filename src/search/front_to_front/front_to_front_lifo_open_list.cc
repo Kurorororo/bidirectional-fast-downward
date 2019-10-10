@@ -25,8 +25,8 @@ class FrontToFrontLIFOOpenList : public FrontToFrontOpenList<Entry> {
   shared_ptr<FrontToFrontHeuristic> evaluator;
 
  protected:
-  virtual void do_insertion(EvaluationContext &eval_context,
-                            const Entry &entry) override;
+  virtual void do_insertion(EvaluationContext &eval_context, const Entry &entry,
+                            bool to_top) override;
 
  public:
   explicit FrontToFrontLIFOOpenList(const Options &opts);
@@ -60,7 +60,7 @@ FrontToFrontLIFOOpenList<Entry>::FrontToFrontLIFOOpenList(
 
 template <class Entry>
 void FrontToFrontLIFOOpenList<Entry>::do_insertion(
-    EvaluationContext &eval_context, const Entry &entry) {
+    EvaluationContext &eval_context, const Entry &entry, bool to_top) {
   int key = eval_context.get_evaluator_value(evaluator.get());
   buckets[key].push_back(entry);
   ++size;

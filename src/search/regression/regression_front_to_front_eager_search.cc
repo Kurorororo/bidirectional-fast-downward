@@ -206,7 +206,8 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
             continue;
           }
 
-          open_lists[Direction::FORWARD]->insert(eval_context, s.get_id());
+          open_lists[Direction::FORWARD]->insert(eval_context, s.get_id(),
+                                                 true);
           continue;
         }
       }
@@ -240,7 +241,8 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
             continue;
           }
 
-          open_lists[Direction::BACKWARD]->insert(eval_context, s.get_id());
+          open_lists[Direction::BACKWARD]->insert(eval_context, s.get_id(),
+                                                  true);
           continue;
         }
       }

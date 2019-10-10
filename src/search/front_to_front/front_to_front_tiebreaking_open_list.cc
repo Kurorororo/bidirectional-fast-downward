@@ -34,8 +34,8 @@ class FrontToFrontTieBreakingOpenList : public FrontToFrontOpenList<Entry> {
   int dimension() const;
 
  protected:
-  virtual void do_insertion(EvaluationContext &eval_context,
-                            const Entry &entry) override;
+  virtual void do_insertion(EvaluationContext &eval_context, const Entry &entry,
+                            bool to_top) override;
 
  public:
   explicit FrontToFrontTieBreakingOpenList(const Options &opts);
@@ -62,14 +62,17 @@ FrontToFrontTieBreakingOpenList<Entry>::FrontToFrontTieBreakingOpenList(
 
 template <class Entry>
 void FrontToFrontTieBreakingOpenList<Entry>::do_insertion(
-    EvaluationContext &eval_context, const Entry &entry) {
+    EvaluationContext &eval_context, const Entry &entry, bool to_top) {
   vector<int> key;
   key.reserve(evaluators.size());
   for (const shared_ptr<Evaluator> &evaluator : evaluators)
     key.push_back(
         eval_context.get_evaluator_value_or_infinity(evaluator.get()));
 
-  buckets[key].push_back(entry);
+  if (to_top)
+    buckets[key].push_front(entry);
+  else
+    buckets[key].push_back(entry);
   ++size;
 }
 

@@ -15,14 +15,15 @@ class FrontToFrontOpenList {
   bool only_preferred;
 
  protected:
-  virtual void do_insertion(EvaluationContext &eval_context,
-                            const Entry &entry) = 0;
+  virtual void do_insertion(EvaluationContext &eval_context, const Entry &entry,
+                            bool to_top) = 0;
 
  public:
   explicit FrontToFrontOpenList(bool preferred_only = false);
   virtual ~FrontToFrontOpenList() = default;
 
-  void insert(EvaluationContext &eval_context, const Entry &entry);
+  void insert(EvaluationContext &eval_context, const Entry &entry,
+              bool to_top = false);
   virtual Entry remove_min() = 0;
   virtual bool empty() const = 0;
   virtual void clear() = 0;
@@ -54,9 +55,9 @@ void FrontToFrontOpenList<Entry>::boost_preferred() {}
 
 template <class Entry>
 void FrontToFrontOpenList<Entry>::insert(EvaluationContext &eval_context,
-                                         const Entry &entry) {
+                                         const Entry &entry, bool to_top) {
   if (only_preferred && !eval_context.is_preferred()) return;
-  if (!is_dead_end(eval_context)) do_insertion(eval_context, entry);
+  if (!is_dead_end(eval_context)) do_insertion(eval_context, entry, to_top);
 }
 
 template <class Entry>
