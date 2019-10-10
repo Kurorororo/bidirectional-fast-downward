@@ -24,6 +24,8 @@ RegressionFrontToFrontEagerSearch::RegressionFrontToFrontEagerSearch(
     const Options &opts)
     : SearchEngine(opts),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
+      prune_goal(opts.get<bool>("prune_goal")),
+      is_initial(true),
       reevaluation(Reevaluation(opts.get_enum("reeval"))),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
@@ -95,11 +97,22 @@ void RegressionFrontToFrontEagerSearch::initialize() {
   }
   directions[initial_state] = Direction::FORWARD;
 
-  vector<int> goal_state_values = regression_task->get_goal_state_values();
-  State goal_state =
-      regression_task_proxy.create_state(move(goal_state_values));
+  goal_state_values = regression_task->get_goal_state_values();
+  vector<int> to_be_moved = goal_state_values;
+  State goal_state = regression_task_proxy.create_state(move(to_be_moved));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
+  VariablesProxy variables = regression_task_proxy.get_variables();
+  int n_undefined = 0;
+
+  for (int i = 0; i < variables.size(); ++i) {
+    if (global_goal_state[i] == variables[i].get_domain_size() - 1) {
+      ++n_undefined;
+    }
+  }
+
+  cout << "undefiend: " << n_undefined << "/" << variables.size() << endl;
+
   for (Evaluator *evaluator : path_dependent_evaluators[Direction::BACKWARD]) {
     evaluator->notify_initial_state(initial_state);
   }
@@ -472,7 +485,30 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
   vector<OperatorID> applicable_ops;
   regression_successor_generator.generate_applicable_ops(state, applicable_ops);
 
+  // if (prune_goal && !is_initial &&
+  //    task_properties::is_goal_state(task_proxy, state)) {
+  //  cout << "state is goal" << endl;
+  //}
+
+  bool do_predecessor_pruning = prune_goal && is_initial;
+  if (is_initial) is_initial = false;
+
   for (OperatorID op_id : applicable_ops) {
+    if (do_predecessor_pruning) {
+      OperatorProxy fop = task_proxy.get_operators()[op_id];
+      bool add_goal = false;
+
+      for (EffectProxy effect : fop.get_effects()) {
+        FactPair effect_pair = effect.get_fact().get_pair();
+        if (goal_state_values[effect_pair.var] == effect_pair.value) {
+          add_goal = true;
+          break;
+        }
+      }
+
+      if (!add_goal) continue;
+    }
+
     OperatorProxy op = regression_task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 

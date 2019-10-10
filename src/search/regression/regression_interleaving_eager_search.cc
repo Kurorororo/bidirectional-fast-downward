@@ -24,6 +24,8 @@ RegressionInterleavingEagerSearch::RegressionInterleavingEagerSearch(
     const Options &opts)
     : SearchEngine(opts),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
+      prune_goal(opts.get<bool>("prune_goal")),
+      is_initial(true),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -94,9 +96,9 @@ void RegressionInterleavingEagerSearch::initialize() {
   }
   directions[initial_state] = Direction::FORWARD;
 
-  vector<int> goal_state_values = regression_task->get_goal_state_values();
-  State goal_state =
-      regression_task_proxy.create_state(move(goal_state_values));
+  goal_state_values = regression_task->get_goal_state_values();
+  vector<int> to_be_moved = goal_state_values;
+  State goal_state = regression_task_proxy.create_state(move(to_be_moved));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
   for (Evaluator *evaluator : path_dependent_evaluators[Direction::BACKWARD]) {
@@ -377,7 +379,25 @@ SearchStatus RegressionInterleavingEagerSearch::backward_step(
   vector<OperatorID> applicable_ops;
   regression_successor_generator.generate_applicable_ops(state, applicable_ops);
 
+  bool do_predecessor_pruning = prune_goal && is_initial;
+  if (is_initial) is_initial = false;
+
   for (OperatorID op_id : applicable_ops) {
+    if (do_predecessor_pruning) {
+      OperatorProxy fop = task_proxy.get_operators()[op_id];
+      bool add_goal = false;
+
+      for (EffectProxy effect : fop.get_effects()) {
+        FactPair effect_pair = effect.get_fact().get_pair();
+        if (goal_state_values[effect_pair.var] == effect_pair.value) {
+          add_goal = true;
+          break;
+        }
+      }
+
+      if (!add_goal) continue;
+    }
+
     OperatorProxy op = regression_task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 

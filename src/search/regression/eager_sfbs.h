@@ -28,6 +28,9 @@ class EagerSFBS : public SearchEngine {
   };
 
   const bool reopen_closed_nodes;
+  bool prune_goal;
+  bool is_initial;
+  std::vector<int> goal_state_values;
 
   std::unique_ptr<FrontToFrontFrontierOpenList> open_list;
   std::shared_ptr<Evaluator> f_evaluator;

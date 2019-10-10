@@ -28,6 +28,8 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
       "preferred", "use preferred operators of these evaluators", "[]");
   parser.add_option<int>("boost",
                          "boost value for preferred operator open lists", "0");
+  parser.add_option<bool>(
+      "prune_goal", "prune goal state other than the original goal", "false");
 
   eager_sfbs::add_options_to_parser(parser);
   Options opts = parser.parse();

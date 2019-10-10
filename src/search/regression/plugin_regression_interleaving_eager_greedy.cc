@@ -36,6 +36,8 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>(
       "preferred_b", "use backward preferred operators of these evaluators",
       "[]");
+  parser.add_option<bool>(
+      "prune_goal", "prune goal state other than the original goal", "false");
 
   regression_interleaving_eager_search::add_options_to_parser(parser);
   Options opts = parser.parse();

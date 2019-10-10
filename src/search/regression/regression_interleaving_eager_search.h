@@ -24,6 +24,9 @@ class RegressionInterleavingEagerSearch : public SearchEngine {
   enum Direction { NONE = 0, FORWARD = 1, BACKWARD = 2 };
 
   const bool reopen_closed_nodes;
+  bool prune_goal;
+  bool is_initial;
+  std::vector<int> goal_state_values;
 
   std::unordered_map<Direction, std::shared_ptr<FrontToFrontStateOpenList>>
       open_lists;

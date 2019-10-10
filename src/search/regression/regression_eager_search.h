@@ -27,6 +27,8 @@ class Options;
 namespace regression_eager_search {
 class RegressionEagerSearch : public SearchEngine {
   const bool reopen_closed_nodes;
+  bool prune_goal;
+  bool is_initial;
 
   std::shared_ptr<FrontToFrontStateOpenList> open_list;
   std::shared_ptr<Evaluator> f_evaluator;
@@ -34,6 +36,8 @@ class RegressionEagerSearch : public SearchEngine {
   std::vector<Evaluator *> path_dependent_evaluators;
   std::vector<std::shared_ptr<FrontToFrontHeuristic>>
       preferred_operator_evaluators;
+
+  std::vector<int> goal_state_values;
 
   void start_f_value_statistics(EvaluationContext &eval_context);
   void update_f_value_statistics(EvaluationContext &eval_context);

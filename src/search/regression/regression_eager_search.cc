@@ -8,6 +8,7 @@
 
 #include "../algorithms/ordered_set.h"
 #include "../front_to_front/front_to_front_open_list_factory.h"
+#include "../task_utils/task_properties.h"
 #include "regression_successor_generator.h"
 
 #include "../utils/logging.h"
@@ -24,6 +25,8 @@ namespace regression_eager_search {
 RegressionEagerSearch::RegressionEagerSearch(const Options &opts)
     : SearchEngine(opts),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
+      prune_goal(opts.get<bool>("prune_goal")),
+      is_initial(true),
       open_list(opts.get<shared_ptr<FrontToFrontOpenListFactory>>("open")
                     ->create_state_open_list()),
       f_evaluator(opts.get<shared_ptr<Evaluator>>("f_eval", nullptr)),
@@ -71,9 +74,9 @@ void RegressionEagerSearch::initialize() {
     evaluator->notify_initial_state(initial_state);
   }
 
-  vector<int> goal_state_values = regression_task->get_goal_state_values();
-  State goal_state =
-      partial_state_task_proxy.create_state(move(goal_state_values));
+  goal_state_values = regression_task->get_goal_state_values();
+  vector<int> to_be_moved = goal_state_values;
+  State goal_state = partial_state_task_proxy.create_state(move(to_be_moved));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
 
@@ -168,7 +171,30 @@ SearchStatus RegressionEagerSearch::step() {
         eval_context, preferred_operator_evaluator.get(), preferred_operators);
   }
 
+  // if (prune_goal && !is_initial &&
+  //    task_properties::is_goal_state(task_proxy, s)) {
+  //  return IN_PROGRESS;
+  //}
+
+  bool do_predecessor_pruning = prune_goal && is_initial;
+  if (is_initial) is_initial = false;
+
   for (OperatorID op_id : applicable_ops) {
+    if (do_predecessor_pruning) {
+      OperatorProxy fop = task_proxy.get_operators()[op_id];
+      bool add_goal = false;
+
+      for (EffectProxy effect : fop.get_effects()) {
+        FactPair effect_pair = effect.get_fact().get_pair();
+        if (goal_state_values[effect_pair.var] == effect_pair.value) {
+          add_goal = true;
+          break;
+        }
+      }
+
+      if (!add_goal) continue;
+    }
+
     OperatorProxy op = regression_task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 
