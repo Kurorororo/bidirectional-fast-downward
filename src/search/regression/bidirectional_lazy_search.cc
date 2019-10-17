@@ -26,6 +26,7 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       randomize_successors(opts.get<bool>("randomize_successors")),
       preferred_successors_first(opts.get<bool>("preferred_successors_first")),
       prune_goal(opts.get<bool>("prune_goal")),
+      front_to_front(opts.get<bool>("front_to_front")),
       rng(utils::parse_rng_from_options(opts)),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
@@ -49,7 +50,7 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       bac_current_operator_id(OperatorID::no_operator),
       bac_current_g(0),
       bac_current_real_g(0),
-      bac_current_eval_context(bac_current_state, 0, true, &statistics) {
+      bac_current_eval_context(for_current_state, 0, true, &statistics) {
   /*
     We initialize current_eval_context in such a way that the initial node
     counts as "preferred".
@@ -251,6 +252,16 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
     associate with the expanded vs. evaluated nodes in lazy search
     and where to obtain it from.
   */
+
+  if (front_to_front && !bac_open_list->empty()) {
+    auto top = bac_open_list->get_min_value_and_entry();
+    GlobalState frontier_state =
+        regression_state_registry.lookup_state(top.second.first);
+    if (check_meeting_and_set_plan(for_current_state, frontier_state))
+      return SOLVED;
+    for_open_list->set_goal(frontier_state);
+  }
+
   for_current_eval_context =
       EvaluationContext(for_current_state, for_current_g, true, &statistics);
 
@@ -313,9 +324,20 @@ SearchStatus BidirectionalLazySearch::bac_fetch_next_state() {
   }
 
   bac_open_list->set_goal(bac_current_state);
-  bac_current_eval_context =
-      EvaluationContext(regression_state_registry.get_initial_state(),
-                        bac_current_g, true, &statistics);
+
+  if (front_to_front && !for_open_list->empty()) {
+    auto top = for_open_list->get_min_value_and_entry();
+    GlobalState frontier_state =
+        regression_state_registry.lookup_state(top.second.first);
+    if (check_meeting_and_set_plan(frontier_state, bac_current_state))
+      return SOLVED;
+    bac_current_eval_context =
+        EvaluationContext(frontier_state, bac_current_g, true, &statistics);
+  } else {
+    bac_current_eval_context =
+        EvaluationContext(regression_state_registry.get_initial_state(),
+                          bac_current_g, true, &statistics);
+  }
 
   current_direction = BACKWARD;
 
@@ -377,7 +399,11 @@ SearchStatus BidirectionalLazySearch::for_step() {
         }
       }
       node.close();
-      if (check_goal_and_set_plan(for_current_state)) return SOLVED;
+      if (check_goal_and_set_plan(for_current_state)) {
+        cout << "#forward actions: " << get_plan().size() << endl;
+        cout << "#backward actions: " << 0 << endl;
+        return SOLVED;
+      }
       if (search_progress.check_progress(for_current_eval_context)) {
         statistics.print_checkpoint_line(for_current_g);
         for_reward_progress();
@@ -450,7 +476,11 @@ SearchStatus BidirectionalLazySearch::bac_step() {
         }
       }
       node.close();
-      if (check_initial_and_set_plan(bac_current_state)) return SOLVED;
+      if (check_initial_and_set_plan(bac_current_state)) {
+        cout << "#forward actions: " << 0 << endl;
+        cout << "#backward actions: " << get_plan().size() << endl;
+        return SOLVED;
+      }
       if (search_progress.check_progress(bac_current_eval_context)) {
         statistics.print_checkpoint_line(bac_current_g);
         bac_reward_progress();

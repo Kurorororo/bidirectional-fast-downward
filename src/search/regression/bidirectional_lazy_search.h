@@ -39,6 +39,7 @@ class BidirectionalLazySearch : public SearchEngine {
   bool randomize_successors;
   bool preferred_successors_first;
   bool prune_goal;
+  bool front_to_front;
   std::shared_ptr<utils::RandomNumberGenerator> rng;
 
   std::vector<Evaluator *> for_path_dependent_evaluators;

@@ -18,6 +18,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<bool>("reopen_closed", "reopen closed nodes", "false");
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
+  parser.add_option<bool>("front_to_front", "f2f", "false");
   parser.add_option<shared_ptr<Evaluator>>(
       "f_eval_f",
       "set forward evaluator for jump statistics. "
