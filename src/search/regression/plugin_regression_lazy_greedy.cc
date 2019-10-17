@@ -58,6 +58,8 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
       "boost value for alternation queues that are restricted "
       "to preferred operator nodes",
       DEFAULT_LAZY_BOOST);
+  parser.add_option<bool>(
+      "prune_goal", "prune goal state other than the original goal", "false");
   SearchEngine::add_succ_order_options(parser);
   SearchEngine::add_options_to_parser(parser);
   Options opts = parser.parse();

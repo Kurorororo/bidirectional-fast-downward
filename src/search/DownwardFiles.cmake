@@ -804,6 +804,8 @@ fast_downward_plugin(
     SOURCES
         regression/plugin_regression_interleaving_eager_greedy
         regression/regression_interleaving_eager_search
+        regression/plugin_bidirectional_lazy_greedy
+        regression/bidirectional_lazy_search
         regression/plugin_regression_lazy
         regression/regression_lazy_search
         regression/plugin_eager_sfbs_greedy

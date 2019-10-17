@@ -27,6 +27,7 @@ RegressionLazySearch::RegressionLazySearch(const Options &opts)
       regression_task_proxy(*regression_task),
       regression_successor_generator(regression_task),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
+      prune_goal(opts.get<bool>("prune_goal")),
       randomize_successors(opts.get<bool>("randomize_successors")),
       preferred_successors_first(opts.get<bool>("preferred_successors_first")),
       rng(utils::parse_rng_from_options(opts)),
@@ -148,6 +149,12 @@ SearchStatus RegressionLazySearch::fetch_next_state() {
         current_predecessor, current_operator);
 
     if (current_state_id == StateID::no_state) continue;
+
+    if (prune_goal) {
+      GlobalState pre_state =
+          regression_state_registry.lookup_state(current_state_id);
+      if (task_properties::is_goal_state(task_proxy, pre_state)) continue;
+    }
 
     SearchNode pred_node =
         partial_state_search_space.get_node(current_predecessor);

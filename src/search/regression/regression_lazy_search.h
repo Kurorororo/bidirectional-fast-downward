@@ -36,8 +36,8 @@ class RegressionLazySearch : public SearchEngine {
       regression_successor_generator;
 
   // Search behavior parameters
-  bool reopen_closed_nodes;  // whether to reopen closed nodes upon finding
-                             // lower g paths
+  bool reopen_closed_nodes;  // whether to reopen closed nodes upon finding lower g paths
+  bool prune_goal;
   bool randomize_successors;
   bool preferred_successors_first;
   std::shared_ptr<utils::RandomNumberGenerator> rng;
