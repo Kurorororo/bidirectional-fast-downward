@@ -38,7 +38,8 @@ RegressionLazySearch::RegressionLazySearch(const Options &opts)
       current_operator_id(OperatorID::no_operator),
       current_g(0),
       current_real_g(0),
-      current_eval_context(current_state, 0, true, &statistics) {
+      current_eval_context(regression_state_registry.get_initial_state(), 0,
+                           true, &statistics) {
   /*
     We initialize current_eval_context in such a way that the initial node
     counts as "preferred".
