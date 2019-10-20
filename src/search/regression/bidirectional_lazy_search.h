@@ -40,6 +40,7 @@ class BidirectionalLazySearch : public SearchEngine {
   bool preferred_successors_first;
   bool prune_goal;
   bool front_to_front;
+  bool reeval;
   std::shared_ptr<utils::RandomNumberGenerator> rng;
 
   std::vector<Evaluator *> for_path_dependent_evaluators;
@@ -57,6 +58,7 @@ class BidirectionalLazySearch : public SearchEngine {
       regression_successor_generator;
   Direction current_direction;
   PerStateInformation<Direction> directions;
+  PerStateInformation<StateID> pair_state;
 
   GlobalState for_current_state;
   StateID for_current_predecessor_id;
@@ -71,6 +73,10 @@ class BidirectionalLazySearch : public SearchEngine {
   int bac_current_g;
   int bac_current_real_g;
   EvaluationContext bac_current_eval_context;
+
+  EdgeOpenListEntry previous_entry;
+  StateID parent_id;
+  EvaluationContext parent_eval_context;
 
   virtual void initialize() override;
   virtual SearchStatus step() override;

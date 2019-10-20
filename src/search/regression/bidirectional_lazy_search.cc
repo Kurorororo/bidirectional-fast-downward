@@ -27,6 +27,7 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       preferred_successors_first(opts.get<bool>("preferred_successors_first")),
       prune_goal(opts.get<bool>("prune_goal")),
       front_to_front(opts.get<bool>("front_to_front")),
+      reeval(opts.get<bool>("reeval")),
       rng(utils::parse_rng_from_options(opts)),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
@@ -37,6 +38,7 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       regression_successor_generator(regression_task),
       current_direction(FORWARD),
       directions(NONE),
+      pair_state(StateID::no_state),
       for_current_state(regression_state_registry.get_initial_state()),
       for_current_predecessor_id(StateID::no_state),
       for_current_operator_id(OperatorID::no_operator),
@@ -50,7 +52,10 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       bac_current_operator_id(OperatorID::no_operator),
       bac_current_g(0),
       bac_current_real_g(0),
-      bac_current_eval_context(for_current_state, 0, true, &statistics) {
+      bac_current_eval_context(for_current_state, 0, true, &statistics),
+      previous_entry(make_pair(StateID::no_state, OperatorID::no_operator)),
+      parent_id(StateID::no_state),
+      parent_eval_context(for_current_state, 0, true, &statistics) {
   /*
     We initialize current_eval_context in such a way that the initial node
     counts as "preferred".
@@ -214,34 +219,83 @@ void BidirectionalLazySearch::generate_predecessors() {
 }
 
 SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
-  if (for_open_list->empty()) {
-    cout << "Completely explored state space -- no solution!" << endl;
-    return FAILED;
-  }
-  EdgeOpenListEntry next = for_open_list->remove_min();
+  while (true) {
+    if (for_open_list->empty()) {
+      cout << "Completely explored state space -- no solution!" << endl;
+      return FAILED;
+    }
+    EdgeOpenListEntry next = for_open_list->remove_min();
 
-  for_current_predecessor_id = next.first;
-  for_current_operator_id = next.second;
-  GlobalState current_predecessor =
-      regression_state_registry.lookup_state(for_current_predecessor_id);
-  OperatorProxy current_operator =
-      task_proxy.get_operators()[for_current_operator_id];
-  assert(task_properties::is_applicable(current_operator,
-                                        current_predecessor.unpack()));
-  for_current_state = regression_state_registry.get_successor_state(
-      current_predecessor, current_operator);
+    for_current_predecessor_id = next.first;
+    for_current_operator_id = next.second;
+    GlobalState current_predecessor =
+        regression_state_registry.lookup_state(for_current_predecessor_id);
 
-  SearchNode pred_node =
-      partial_state_search_space.get_node(current_predecessor);
-  for_current_g = pred_node.get_g() + get_adjusted_cost(current_operator);
-  for_current_real_g = pred_node.get_real_g() + current_operator.get_cost();
+    if (front_to_front && reeval && !bac_open_list->empty() &&
+        next != previous_entry) {
+      auto node = partial_state_search_space.get_node(current_predecessor);
+      auto new_parent_id = node.get_parent_state_id();
 
-  if (directions[for_current_state] == BACKWARD) {
-    meet_set_plan(FORWARD, current_predecessor, for_current_operator_id,
-                  for_current_state);
-    return SOLVED;
-  } else {
-    directions[for_current_state] = FORWARD;
+      if (new_parent_id != StateID::no_state && new_parent_id != parent_id) {
+        GlobalState parent_state =
+            regression_state_registry.lookup_state(new_parent_id);
+
+        auto top = bac_open_list->get_min_value_and_entry();
+        GlobalState frontier_state =
+            regression_state_registry.lookup_state(top.second.first);
+        auto frontier_node =
+            partial_state_search_space.get_node(frontier_state);
+
+        if (pair_state[parent_state] != frontier_node.get_parent_state_id()) {
+          parent_id = new_parent_id;
+          pair_state[parent_state] = frontier_state.get_id();
+          for_open_list->set_goal(frontier_state);
+          auto parent_node = partial_state_search_space.get_node(parent_state);
+          parent_eval_context = EvaluationContext(
+              current_predecessor, parent_node.get_real_g(), true, &statistics);
+          for_open_list->is_dead_end(parent_eval_context);
+          statistics.inc_evaluated_states();
+          auto new_eval_context =
+              EvaluationContext(parent_eval_context.get_cache(),
+                                node.get_real_g(), false, nullptr);
+          for_open_list->insert(new_eval_context, next, true);
+          previous_entry = next;
+          continue;
+        }
+      } else if (new_parent_id != StateID::no_state &&
+                 new_parent_id == parent_id) {
+        auto new_eval_context = EvaluationContext(
+            parent_eval_context.get_cache(), node.get_real_g(), false, nullptr);
+        for_open_list->insert(new_eval_context, next, true);
+        previous_entry = next;
+        continue;
+      }
+
+      parent_id = StateID::no_state;
+      previous_entry = make_pair(StateID::no_state, OperatorID::no_operator);
+    }
+
+    OperatorProxy current_operator =
+        task_proxy.get_operators()[for_current_operator_id];
+    assert(task_properties::is_applicable(current_operator,
+                                          current_predecessor.unpack()));
+    for_current_state = regression_state_registry.get_successor_state(
+        current_predecessor, current_operator);
+
+    SearchNode pred_node =
+        partial_state_search_space.get_node(current_predecessor);
+    for_current_g = pred_node.get_g() + get_adjusted_cost(current_operator);
+    for_current_real_g = pred_node.get_real_g() + current_operator.get_cost();
+
+    if (directions[for_current_state] == BACKWARD) {
+      meet_set_plan(FORWARD, current_predecessor, for_current_operator_id,
+                    for_current_state);
+      return SOLVED;
+    } else {
+      directions[for_current_state] = FORWARD;
+    }
+
+    break;
   }
 
   /*
@@ -258,6 +312,8 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
     GlobalState frontier_state =
         regression_state_registry.lookup_state(top.second.first);
     for_open_list->set_goal(frontier_state);
+
+    if (reeval) pair_state[for_current_state] = frontier_state.get_id();
   }
 
   for_current_eval_context =
@@ -285,6 +341,53 @@ SearchStatus BidirectionalLazySearch::bac_fetch_next_state() {
         regression_state_registry.lookup_state(bac_current_successor_id);
     OperatorProxy current_operator =
         regression_task_proxy.get_operators()[bac_current_operator_id];
+
+    if (front_to_front && reeval && !for_open_list->empty() &&
+        next != previous_entry) {
+      auto node = partial_state_search_space.get_node(current_successor);
+      auto new_parent_id = node.get_parent_state_id();
+
+      if (new_parent_id != StateID::no_state && new_parent_id != parent_id) {
+        GlobalState parent_state =
+            regression_state_registry.lookup_state(new_parent_id);
+
+        auto top = for_open_list->get_min_value_and_entry();
+        GlobalState frontier_state =
+            regression_state_registry.lookup_state(top.second.first);
+        auto frontier_node =
+            partial_state_search_space.get_node(frontier_state);
+
+        if (pair_state[parent_state] != frontier_node.get_parent_state_id()) {
+          pair_state[parent_state] = frontier_state.get_id();
+          parent_id = new_parent_id;
+          bac_open_list->set_goal(parent_state);
+
+          auto parent_node = partial_state_search_space.get_node(parent_state);
+          parent_eval_context = EvaluationContext(
+              frontier_state, parent_node.get_real_g(), true, &statistics);
+          statistics.inc_evaluated_states();
+
+          bac_open_list->is_dead_end(parent_eval_context);
+
+          auto new_eval_context =
+              EvaluationContext(parent_eval_context.get_cache(),
+                                node.get_real_g(), false, nullptr);
+          bac_open_list->insert(new_eval_context, next, true);
+          previous_entry = next;
+          continue;
+        }
+      } else if (new_parent_id != StateID::no_state &&
+                 new_parent_id == parent_id) {
+        auto new_eval_context = EvaluationContext(
+            parent_eval_context.get_cache(), node.get_real_g(), false, nullptr);
+        bac_open_list->insert(new_eval_context, next, true);
+        previous_entry = next;
+        continue;
+      }
+
+      parent_id = StateID::no_state;
+    }
+
     assert(task_properties::is_applicable(current_operator,
                                           current_successor.unpack()));
     state_id = regression_state_registry.get_predecessor_state(
@@ -329,6 +432,8 @@ SearchStatus BidirectionalLazySearch::bac_fetch_next_state() {
         regression_state_registry.lookup_state(top.second.first);
     bac_current_eval_context =
         EvaluationContext(frontier_state, bac_current_g, true, &statistics);
+
+    if (reeval) pair_state[bac_current_state] = frontier_state.get_id();
   } else {
     bac_current_eval_context =
         EvaluationContext(regression_state_registry.get_initial_state(),
