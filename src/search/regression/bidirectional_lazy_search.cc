@@ -257,8 +257,6 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
     auto top = bac_open_list->get_min_value_and_entry();
     GlobalState frontier_state =
         regression_state_registry.lookup_state(top.second.first);
-    if (check_meeting_and_set_plan(for_current_state, frontier_state))
-      return SOLVED;
     for_open_list->set_goal(frontier_state);
   }
 
@@ -329,8 +327,6 @@ SearchStatus BidirectionalLazySearch::bac_fetch_next_state() {
     auto top = for_open_list->get_min_value_and_entry();
     GlobalState frontier_state =
         regression_state_registry.lookup_state(top.second.first);
-    if (check_meeting_and_set_plan(frontier_state, bac_current_state))
-      return SOLVED;
     bac_current_eval_context =
         EvaluationContext(frontier_state, bac_current_g, true, &statistics);
   } else {
@@ -399,6 +395,14 @@ SearchStatus BidirectionalLazySearch::for_step() {
         }
       }
       node.close();
+      if (front_to_front && !bac_open_list->empty()) {
+        auto top = bac_open_list->get_min_value_and_entry();
+        GlobalState frontier_state =
+            regression_state_registry.lookup_state(top.second.first);
+        if (check_meeting_and_set_plan(for_current_state, frontier_state))
+          return SOLVED;
+      }
+
       if (check_goal_and_set_plan(for_current_state)) {
         cout << "#forward actions: " << get_plan().size() << endl;
         cout << "#backward actions: " << 0 << endl;
@@ -476,6 +480,14 @@ SearchStatus BidirectionalLazySearch::bac_step() {
         }
       }
       node.close();
+      if (front_to_front && !for_open_list->empty()) {
+        auto top = for_open_list->get_min_value_and_entry();
+        GlobalState frontier_state =
+            regression_state_registry.lookup_state(top.second.first);
+        if (check_meeting_and_set_plan(frontier_state, bac_current_state))
+          return SOLVED;
+      }
+
       if (check_initial_and_set_plan(bac_current_state)) {
         cout << "#forward actions: " << 0 << endl;
         cout << "#backward actions: " << get_plan().size() << endl;
