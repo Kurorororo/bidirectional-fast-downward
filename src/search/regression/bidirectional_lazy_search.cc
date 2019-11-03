@@ -26,6 +26,7 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       randomize_successors(opts.get<bool>("randomize_successors")),
       preferred_successors_first(opts.get<bool>("preferred_successors_first")),
       prune_goal(opts.get<bool>("prune_goal")),
+      bdd(opts.get<bool>("bdd")),
       front_to_front(opts.get<bool>("front_to_front")),
       reeval(opts.get<bool>("reeval")),
       rng(utils::parse_rng_from_options(opts)),
@@ -36,6 +37,8 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       regression_task(tasks::RegressionTask::get_regression_task()),
       regression_task_proxy(*regression_task),
       regression_successor_generator(regression_task),
+      for_symbolic_closed_list(regression_task_proxy),
+      bac_symbolic_closed_list(regression_task_proxy),
       current_direction(FORWARD),
       directions(NONE),
       pair_state(StateID::no_state),
@@ -292,6 +295,18 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
                     for_current_state);
       return SOLVED;
     } else {
+      if (bdd && bac_symbolic_closed_list.IsClosed(for_current_state)) {
+        StateID subsuming_state_id = get_subsuming_state_id(for_current_state);
+
+        if (subsuming_state_id != StateID::no_state) {
+          GlobalState subsuming_state =
+              regression_state_registry.lookup_state(subsuming_state_id);
+          meet_set_plan(FORWARD, current_predecessor, for_current_operator_id,
+                        subsuming_state);
+          return SOLVED;
+        }
+      }
+
       directions[for_current_state] = FORWARD;
     }
 
@@ -411,6 +426,18 @@ SearchStatus BidirectionalLazySearch::bac_fetch_next_state() {
                     current_successor);
       return SOLVED;
     } else {
+      if (bdd && for_symbolic_closed_list.IsSubsumed(bac_current_state)) {
+        StateID subsumed_state_id = get_subsumed_state_id(bac_current_state);
+
+        if (subsumed_state_id != StateID::no_state) {
+          GlobalState subsumed_state =
+              regression_state_registry.lookup_state(subsumed_state_id);
+          meet_set_plan(BACKWARD, subsumed_state, bac_current_operator_id,
+                        current_successor);
+          return SOLVED;
+        }
+      }
+
       directions[bac_current_state] = BACKWARD;
     }
 
@@ -500,6 +527,7 @@ SearchStatus BidirectionalLazySearch::for_step() {
         }
       }
       node.close();
+      if (bdd) for_symbolic_closed_list.Close(for_current_state);
       if (front_to_front && !bac_open_list->empty()) {
         auto top = bac_open_list->get_min_value_and_entry();
         GlobalState frontier_state =
@@ -549,6 +577,11 @@ SearchStatus BidirectionalLazySearch::bac_step() {
   // - current_real_g is the g value of the current state (using real costs)
 
   SearchNode node = partial_state_search_space.get_node(bac_current_state);
+
+  if (node.is_new() && bdd &&
+      !bac_symbolic_closed_list.CloseIfNot(bac_current_state))
+    node.close();
+
   bool reopen = reopen_closed_nodes && !node.is_new() && !node.is_dead_end() &&
                 (for_current_g < node.get_g());
 
@@ -703,6 +736,52 @@ void BidirectionalLazySearch::meet_set_plan(Direction d, const GlobalState &s_f,
   cout << "#backward actions: " << regression_plan.size() << endl;
   plan.insert(plan.end(), regression_plan.begin(), regression_plan.end());
   set_plan(plan);
+}
+
+StateID BidirectionalLazySearch::get_subsuming_state_id(
+    const GlobalState &state) const {
+  VariablesProxy variables = partial_state_task_proxy.get_variables();
+
+  for (StateID state_id : regression_state_registry) {
+    GlobalState another_state =
+        regression_state_registry.lookup_state(state_id);
+
+    if (directions[another_state] == FORWARD) continue;
+
+    for (auto var : variables) {
+      if (another_state[var.get_id()] != var.get_domain_size() - 1 &&
+          state[var.get_id()] != another_state[var.get_id()]) {
+        continue;
+      }
+    }
+
+    return state_id;
+  }
+
+  return StateID::no_state;
+}
+
+StateID BidirectionalLazySearch::get_subsumed_state_id(
+    const GlobalState &state) const {
+  VariablesProxy variables = partial_state_task_proxy.get_variables();
+
+  for (StateID state_id : regression_state_registry) {
+    GlobalState another_state =
+        regression_state_registry.lookup_state(state_id);
+
+    if (directions[another_state] == BACKWARD) continue;
+
+    for (auto var : variables) {
+      if (state[var.get_id()] != var.get_domain_size() - 1 &&
+          state[var.get_id()] != another_state[var.get_id()]) {
+        continue;
+      }
+    }
+
+    return state_id;
+  }
+
+  return StateID::no_state;
 }
 
 void add_options_to_parser(OptionParser &parser) {

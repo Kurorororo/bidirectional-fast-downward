@@ -78,3 +78,5 @@ if(PLUGIN_LP_SOLVER_ENABLED AND USE_LP)
         )
     endif()
 endif()
+
+target_link_libraries(downward cudd)

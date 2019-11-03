@@ -814,6 +814,7 @@ fast_downward_plugin(
         regression/regression_front_to_front_eager_search
         regression/plugin_regression_eager_greedy
         regression/regression_eager_search
+        regression/symbolic_closed
         regression/regression_successor_generator
         regression/regression_successor_generator_factory
         regression/regression_successor_generator_internals

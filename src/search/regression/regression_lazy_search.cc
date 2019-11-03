@@ -26,8 +26,10 @@ RegressionLazySearch::RegressionLazySearch(const Options &opts)
       regression_task(tasks::RegressionTask::get_regression_task()),
       regression_task_proxy(*regression_task),
       regression_successor_generator(regression_task),
+      symbolic_closed_list(regression_task_proxy),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
       prune_goal(opts.get<bool>("prune_goal")),
+      bdd(opts.get<bool>("bdd")),
       randomize_successors(opts.get<bool>("randomize_successors")),
       preferred_successors_first(opts.get<bool>("preferred_successors_first")),
       rng(utils::parse_rng_from_options(opts)),
@@ -193,6 +195,10 @@ SearchStatus RegressionLazySearch::step() {
   // - current_real_g is the g value of the current state (using real costs)
 
   SearchNode node = partial_state_search_space.get_node(current_state);
+
+  if (node.is_new() && bdd && !symbolic_closed_list.CloseIfNot(current_state))
+    node.close();
+
   bool reopen = reopen_closed_nodes && !node.is_new() && !node.is_dead_end() &&
                 (current_g < node.get_g());
 

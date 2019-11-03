@@ -12,6 +12,7 @@
 #include "regression_state_registry.h"
 #include "regression_successor_generator.h"
 #include "regression_task.h"
+#include "symbolic_closed.h"
 
 #include "../utils/rng.h"
 
@@ -34,10 +35,13 @@ class RegressionLazySearch : public SearchEngine {
   TaskProxy regression_task_proxy;
   regression_successor_generator::RegressionSuccessorGenerator
       regression_successor_generator;
+  symbolic_closed::SymbolicClosedList symbolic_closed_list;
 
   // Search behavior parameters
-  bool reopen_closed_nodes;  // whether to reopen closed nodes upon finding lower g paths
+  bool reopen_closed_nodes;  // whether to reopen closed nodes upon finding
+                             // lower g paths
   bool prune_goal;
+  bool bdd;
   bool randomize_successors;
   bool preferred_successors_first;
   std::shared_ptr<utils::RandomNumberGenerator> rng;

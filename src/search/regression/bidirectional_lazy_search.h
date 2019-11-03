@@ -15,6 +15,7 @@
 #include "regression_state_registry.h"
 #include "regression_successor_generator.h"
 #include "regression_task.h"
+#include "symbolic_closed.h"
 
 #include "../utils/rng.h"
 
@@ -39,6 +40,7 @@ class BidirectionalLazySearch : public SearchEngine {
   bool randomize_successors;
   bool preferred_successors_first;
   bool prune_goal;
+  bool bdd;
   bool front_to_front;
   bool reeval;
   std::shared_ptr<utils::RandomNumberGenerator> rng;
@@ -56,6 +58,8 @@ class BidirectionalLazySearch : public SearchEngine {
   TaskProxy regression_task_proxy;
   regression_successor_generator::RegressionSuccessorGenerator
       regression_successor_generator;
+  symbolic_closed::SymbolicClosedList for_symbolic_closed_list;
+  symbolic_closed::SymbolicClosedList bac_symbolic_closed_list;
   Direction current_direction;
   PerStateInformation<Direction> directions;
   PerStateInformation<StateID> pair_state;
@@ -103,6 +107,10 @@ class BidirectionalLazySearch : public SearchEngine {
                                   const GlobalState &s_b);
   void meet_set_plan(Direction d, const GlobalState &s_f, OperatorID op_id,
                      const GlobalState &s_b);
+
+  StateID get_subsuming_state_id(const GlobalState &s) const;
+
+  StateID get_subsumed_state_id(const GlobalState &s) const;
 
  public:
   explicit BidirectionalLazySearch(const options::Options &opts);

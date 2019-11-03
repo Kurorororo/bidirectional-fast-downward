@@ -15,6 +15,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<bool>("reopen_closed", "reopen closed nodes", "false");
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
+  parser.add_option<bool>("bdd", "use BDD for duplicate detection", "false");
   parser.add_list_option<shared_ptr<Evaluator>>(
       "preferred", "use preferred operators of these evaluators", "[]");
   SearchEngine::add_succ_order_options(parser);
