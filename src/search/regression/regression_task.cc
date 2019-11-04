@@ -71,20 +71,41 @@ void RegressionTask::reverse_operators() {
         new_negative_preconditons.push_back(f);
     }
 
+    vector<unordered_set<int>> ranges(get_num_variables(),
+                                      unordered_set<int>());
+
+    for (int var = 0; var < get_num_variables(); ++var)
+      for (int value = 0; value < get_variable_domain_size(var) - 1; ++value)
+        ranges[var].insert(value);
+
     for (int j = 0; j < parent->get_num_operator_preconditions(i, false); ++j) {
       FactPair fact = parent->get_operator_precondition(i, j, false);
       precondition_var_values[fact.var] = fact.value;
 
-      for (auto f : fact_to_mutexes[fact.var][fact.value])
+      for (auto f : fact_to_mutexes[fact.var][fact.value]) {
+        auto result = ranges[f.var].find(f.value);
+
+        if (result != ranges[f.var].end()) ranges[f.var].erase(result);
+      }
+    }
+
+    for (int var = 0, n = precondition_var_values.size(); var < n; ++var) {
+      if (precondition_var_values[var] == -1 && ranges[var].size() == 1)
+        precondition_var_values[var] = *ranges[var].begin();
+
+      int value = precondition_var_values[var];
+
+      if (value == -1) continue;
+
+      for (auto f : fact_to_mutexes[var][value])
         if (effect_var_values[f.var] != f.value)
           new_negative_preconditons.push_back(f);
 
-      if (effect_var_values[fact.var] == -1 ||
-          effect_var_values[fact.var] == fact.value)
-        new_preconditions.push_back(fact);
+      if (effect_var_values[var] == -1 || effect_var_values[var] == value)
+        new_preconditions.push_back(FactPair(var, value));
 
       new_effects.emplace_back(
-          ExplicitEffect(fact.var, fact.value, move(vector<FactPair>())));
+          ExplicitEffect(var, value, move(vector<FactPair>())));
     }
 
     for (int var = 0, n = effect_var_values.size(); var < n; ++var) {
