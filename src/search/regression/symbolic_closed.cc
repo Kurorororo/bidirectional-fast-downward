@@ -12,8 +12,8 @@ namespace symbolic_closed {
 
 SymbolicClosedList::SymbolicClosedList(const TaskProxy &task_proxy)
     : n_bdd_vars(0),
-      cudd_init_nodes(16000000),
-      cudd_init_cache_size(16000000),
+      cudd_init_nodes(8000000),
+      cudd_init_cache_size(8000000),
       cudd_init_available_memory(0),
       task_proxy(task_proxy),
       manager(nullptr) {
