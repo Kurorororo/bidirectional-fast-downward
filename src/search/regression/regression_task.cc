@@ -109,9 +109,9 @@ void RegressionTask::reverse_operators() {
 
       if (effect_var_values[var] == -1 || effect_var_values[var] == value)
         new_preconditions.push_back(FactPair(var, value));
-      else
-        new_effects.emplace_back(
-            ExplicitEffect(var, value, move(vector<FactPair>())));
+
+      new_effects.emplace_back(
+          ExplicitEffect(var, value, move(vector<FactPair>())));
     }
 
     vector<bool> is_negative(new_preconditions.size(), false);
