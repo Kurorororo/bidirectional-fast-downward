@@ -16,7 +16,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
   parser.add_option<bool>("bdd", "use BDD for duplicate detection", "false");
-  parser.add_list_option<shared_ptr<Evaluator>>(
+  parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>(
       "preferred", "use preferred operators of these evaluators", "[]");
   SearchEngine::add_succ_order_options(parser);
   SearchEngine::add_options_to_parser(parser);
@@ -29,8 +29,8 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
       TODO: The following two lines look fishy. If they serve a
       purpose, shouldn't the constructor take care of this?
     */
-    vector<shared_ptr<Evaluator>> preferred_list =
-        opts.get_list<shared_ptr<Evaluator>>("preferred");
+    vector<shared_ptr<FrontToFrontHeuristic>> preferred_list =
+        opts.get_list<shared_ptr<FrontToFrontHeuristic>>("preferred");
     engine->set_preferred_operator_evaluators(preferred_list);
   }
 

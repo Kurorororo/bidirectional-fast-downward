@@ -782,6 +782,7 @@ fast_downward_plugin(
     SOURCES
         front_to_front/plugin_front_to_front_eager_greedy
         front_to_front/front_to_front_eager_search
+        front_to_front/front_to_front_alternation_open_list
         front_to_front/front_to_front_tiebreaking_open_list
         front_to_front/front_to_front_lifo_open_list
         front_to_front/front_to_front_best_first_open_list

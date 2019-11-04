@@ -47,7 +47,8 @@ class RegressionLazySearch : public SearchEngine {
   std::shared_ptr<utils::RandomNumberGenerator> rng;
 
   std::vector<Evaluator *> path_dependent_evaluators;
-  std::vector<std::shared_ptr<Evaluator>> preferred_operator_evaluators;
+  std::vector<std::shared_ptr<FrontToFrontHeuristic>>
+      preferred_operator_evaluators;
 
   GlobalState current_state;
   StateID current_predecessor_id;
@@ -74,7 +75,7 @@ class RegressionLazySearch : public SearchEngine {
   virtual ~RegressionLazySearch() = default;
 
   void set_preferred_operator_evaluators(
-      std::vector<std::shared_ptr<Evaluator>> &evaluators);
+      std::vector<std::shared_ptr<FrontToFrontHeuristic>> &evaluators);
 
   virtual void print_statistics() const override;
 };

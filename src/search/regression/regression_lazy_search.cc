@@ -49,7 +49,7 @@ RegressionLazySearch::RegressionLazySearch(const Options &opts)
 }
 
 void RegressionLazySearch::set_preferred_operator_evaluators(
-    vector<shared_ptr<Evaluator>> &evaluators) {
+    vector<shared_ptr<FrontToFrontHeuristic>> &evaluators) {
   preferred_operator_evaluators = evaluators;
 }
 
@@ -87,6 +87,9 @@ vector<OperatorID> RegressionLazySearch::get_successor_operators(
   if (preferred_successors_first) {
     ordered_set::OrderedSet<OperatorID> successor_operators;
     for (OperatorID op_id : preferred_operators) {
+      if (find(applicable_operators.begin(), applicable_operators.end(),
+               op_id) == applicable_operators.end())
+        continue;
       successor_operators.insert(op_id);
     }
     for (OperatorID op_id : applicable_operators) {
