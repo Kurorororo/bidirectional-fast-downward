@@ -95,7 +95,13 @@ void RegressionTask::reverse_operators() {
 
       int value = precondition_var_values[var];
 
-      if (value == -1) continue;
+      if (value == -1) {
+        if (effect_var_values[var] != -1)
+          new_effects.emplace_back(
+              ExplicitEffect(var, get_variable_domain_size(var) - 1,
+                             move(vector<FactPair>())));
+        continue;
+      }
 
       for (auto f : fact_to_mutexes[var][value])
         if (effect_var_values[f.var] != f.value)
@@ -103,15 +109,9 @@ void RegressionTask::reverse_operators() {
 
       if (effect_var_values[var] == -1 || effect_var_values[var] == value)
         new_preconditions.push_back(FactPair(var, value));
-
-      new_effects.emplace_back(
-          ExplicitEffect(var, value, move(vector<FactPair>())));
-    }
-
-    for (int var = 0, n = effect_var_values.size(); var < n; ++var) {
-      if (effect_var_values[var] != -1 && precondition_var_values[var] == -1)
-        new_effects.emplace_back(ExplicitEffect(
-            var, get_variable_domain_size(var) - 1, move(vector<FactPair>())));
+      else
+        new_effects.emplace_back(
+            ExplicitEffect(var, value, move(vector<FactPair>())));
     }
 
     vector<bool> is_negative(new_preconditions.size(), false);
