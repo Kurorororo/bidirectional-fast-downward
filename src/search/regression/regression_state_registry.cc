@@ -53,6 +53,22 @@ StateID RegressionStateRegistry::get_predecessor_state(
   }
 
   VariablesProxy variables = task_proxy.get_variables();
+  bool has_mutex = false;
+  bool has_undefined = false;
+
+  for (auto var : variables) {
+    int value = state_packer.get(buffer, var.get_id());
+
+    if (value == var.get_domain_size() - 1)
+      has_mutex = true;
+    else if (!fact_to_mutexes[var.get_id()][value].empty())
+      has_undefined = true;
+
+    if (has_mutex && has_undefined) break;
+  }
+
+  if (!has_mutex && !has_undefined) return insert_id_or_pop_state();
+
   vector<unordered_set<int>> ranges(variables.size(), unordered_set<int>());
 
   for (auto var : variables)

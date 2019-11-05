@@ -89,7 +89,14 @@ void RegressionTask::reverse_operators() {
       }
     }
 
+    bool sprious = false;
+
     for (int var = 0, n = precondition_var_values.size(); var < n; ++var) {
+      if (precondition_var_values[var] == -1 && ranges[var].empty()) {
+        sprious = true;
+        break;
+      }
+
       if (precondition_var_values[var] == -1 && ranges[var].size() == 1)
         precondition_var_values[var] = *ranges[var].begin();
 
@@ -103,16 +110,18 @@ void RegressionTask::reverse_operators() {
         continue;
       }
 
-      for (auto f : fact_to_mutexes[var][value])
-        if (effect_var_values[f.var] != f.value)
-          new_negative_preconditons.push_back(f);
-
-      if (effect_var_values[var] == -1 || effect_var_values[var] == value)
+      if (effect_var_values[var] == -1) {
         new_preconditions.push_back(FactPair(var, value));
+
+        for (auto f : fact_to_mutexes[var][value])
+          new_negative_preconditons.push_back(f);
+      }
 
       new_effects.emplace_back(
           ExplicitEffect(var, value, move(vector<FactPair>())));
     }
+
+    if (sprious) continue;
 
     vector<bool> is_negative(new_preconditions.size(), false);
 

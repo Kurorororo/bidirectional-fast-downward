@@ -149,8 +149,20 @@ SearchStatus RegressionLazySearch::fetch_next_state() {
         regression_state_registry.lookup_state(current_predecessor_id);
     OperatorProxy current_operator =
         regression_task_proxy.get_operators()[current_operator_id];
-    assert(task_properties::is_applicable(current_operator,
-                                          current_predecessor.unpack()));
+
+    OperatorProxy forward_op = task_proxy.get_operators()[current_operator_id];
+    bool any = false;
+
+    for (EffectProxy effect : forward_op.get_effects()) {
+      FactPair effect_pair = effect.get_fact().get_pair();
+      if (current_predecessor[effect_pair.var] == effect_pair.value) {
+        any = true;
+        break;
+      }
+    }
+
+    if (!any) continue;
+
     current_state_id = regression_state_registry.get_predecessor_state(
         current_predecessor, current_operator);
 
