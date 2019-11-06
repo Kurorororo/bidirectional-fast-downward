@@ -760,12 +760,17 @@ StateID BidirectionalLazySearch::get_subsuming_state_id(
 
     if (directions[another_state] == FORWARD) continue;
 
+    bool any = false;
+
     for (auto var : variables) {
       if (another_state[var.get_id()] != var.get_domain_size() - 1 &&
           state[var.get_id()] != another_state[var.get_id()]) {
-        continue;
+        any = true;
+        break;
       }
     }
+
+    if (any) continue;
 
     return state_id;
   }
@@ -783,12 +788,17 @@ StateID BidirectionalLazySearch::get_subsumed_state_id(
 
     if (directions[another_state] == BACKWARD) continue;
 
+    bool any = false;
+
     for (auto var : variables) {
       if (state[var.get_id()] != var.get_domain_size() - 1 &&
           state[var.get_id()] != another_state[var.get_id()]) {
-        continue;
+        any = true;
+        break;
       }
     }
+
+    if (any) continue;
 
     return state_id;
   }
