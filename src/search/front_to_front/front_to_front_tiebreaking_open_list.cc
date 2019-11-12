@@ -183,6 +183,12 @@ FrontToFrontTieBreakingOpenListFactory::create_frontier_open_list() {
       FrontToFrontTieBreakingOpenList<FrontierOpenListEntry>>(options);
 }
 
+unique_ptr<FrontToFrontFrontierEdgeOpenList>
+FrontToFrontTieBreakingOpenListFactory::create_frontier_edge_open_list() {
+  return utils::make_unique_ptr<
+      FrontToFrontTieBreakingOpenList<FrontierEdgeOpenListEntry>>(options);
+}
+
 static shared_ptr<FrontToFrontOpenListFactory> _parse(OptionParser &parser) {
   parser.document_synopsis("Tie-breaking open list", "");
   parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>("evals",

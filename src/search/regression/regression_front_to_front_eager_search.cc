@@ -494,6 +494,18 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
       if (!add_goal) continue;
     }
 
+    OperatorProxy forward_op = task_proxy.get_operators()[op_id];
+    bool any = false;
+
+    for (EffectProxy effect : forward_op.get_effects()) {
+      FactPair effect_pair = effect.get_fact().get_pair();
+      if (state[effect_pair.var] == effect_pair.value) {
+        any = true;
+        break;
+      }
+    }
+
+    if (!any) continue;
     OperatorProxy op = regression_task_proxy.get_operators()[op_id];
     if ((node->get_real_g() + op.get_cost()) >= bound) continue;
 

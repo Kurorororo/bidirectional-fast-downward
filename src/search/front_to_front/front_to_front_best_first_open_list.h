@@ -25,6 +25,8 @@ class FrontToFrontBestFirstOpenListFactory
       override;
   virtual std::unique_ptr<FrontToFrontFrontierOpenList>
   create_frontier_open_list() override;
+  virtual std::unique_ptr<FrontToFrontFrontierEdgeOpenList>
+  create_frontier_edge_open_list() override;
 };
 }  // namespace front_to_front_best_first_open_list
 

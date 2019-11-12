@@ -167,6 +167,12 @@ FrontToFrontAlternationOpenListFactory::create_frontier_open_list() {
       FrontToFrontAlternationOpenList<FrontierOpenListEntry>>(options);
 }
 
+unique_ptr<FrontToFrontFrontierEdgeOpenList>
+FrontToFrontAlternationOpenListFactory::create_frontier_edge_open_list() {
+  return utils::make_unique_ptr<
+      FrontToFrontAlternationOpenList<FrontierEdgeOpenListEntry>>(options);
+}
+
 static shared_ptr<FrontToFrontOpenListFactory> _parse(OptionParser &parser) {
   parser.document_synopsis("FrontToFrontAlternation open list",
                            "alternates between several open lists.");

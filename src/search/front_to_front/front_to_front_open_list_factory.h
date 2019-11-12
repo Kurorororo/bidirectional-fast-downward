@@ -17,6 +17,8 @@ class FrontToFrontOpenListFactory {
   virtual std::unique_ptr<FrontToFrontEdgeOpenList> create_edge_open_list() = 0;
   virtual std::unique_ptr<FrontToFrontFrontierOpenList>
   create_frontier_open_list() = 0;
+  virtual std::unique_ptr<FrontToFrontFrontierEdgeOpenList>
+  create_frontier_edge_open_list() = 0;
 
   /*
     The following template receives manual specializations (in the
