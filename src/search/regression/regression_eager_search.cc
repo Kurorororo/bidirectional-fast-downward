@@ -27,6 +27,7 @@ RegressionEagerSearch::RegressionEagerSearch(const Options &opts)
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
       prune_goal(opts.get<bool>("prune_goal")),
       is_initial(true),
+      bdd(opts.get<bool>("bdd")),
       open_list(opts.get<shared_ptr<FrontToFrontOpenListFactory>>("open")
                     ->create_state_open_list()),
       f_evaluator(opts.get<shared_ptr<Evaluator>>("f_eval", nullptr)),
@@ -38,7 +39,8 @@ RegressionEagerSearch::RegressionEagerSearch(const Options &opts)
       partial_state_search_space(regression_state_registry),
       regression_task(tasks::RegressionTask::get_regression_task()),
       regression_task_proxy(*regression_task),
-      regression_successor_generator(regression_task) {}
+      regression_successor_generator(regression_task),
+      symbolic_closed_list(regression_task_proxy) {}
 
 void RegressionEagerSearch::initialize() {
   cout << "Conducting best first search"
@@ -122,6 +124,8 @@ SearchStatus RegressionEagerSearch::step() {
 
     if (node->is_closed()) continue;
 
+    if (bdd && !symbolic_closed_list.CloseIfNot(node->get_state())) continue;
+
     /*
       We can pass calculate_preferred=false here since preferred
       operators are computed when the state is expanded.
@@ -129,6 +133,7 @@ SearchStatus RegressionEagerSearch::step() {
     EvaluationContext eval_context(s, node->get_g(), false, &statistics);
 
     node->close();
+
     assert(!node->is_dead_end());
     update_f_value_statistics(eval_context);
     statistics.inc_expanded();
@@ -230,6 +235,11 @@ SearchStatus RegressionEagerSearch::step() {
 
     for (Evaluator *evaluator : path_dependent_evaluators) {
       evaluator->notify_state_transition(pre_state, op_id, s);
+    }
+
+    if (bdd && pre_node.is_new() && symbolic_closed_list.IsClosed(pre_state)) {
+      pre_node.close();
+      continue;
     }
 
     // Previously encountered dead end. Don't re-evaluate.

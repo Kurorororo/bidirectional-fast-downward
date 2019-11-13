@@ -30,6 +30,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
                          "boost value for preferred operator open lists", "0");
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
+  parser.add_option<bool>("bdd", "use BDD", "false");
 
   regression_eager_search::add_options_to_parser(parser);
   Options opts = parser.parse();

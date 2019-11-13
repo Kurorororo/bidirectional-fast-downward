@@ -1,5 +1,5 @@
 #include "../search_engines/search_common.h"
-#include "regression_interleaving_eager_search.h"
+#include "bidirectional_eager_search.h"
 
 #include "../front_to_front/front_to_front_heuristic.h"
 #include "../front_to_front/front_to_front_open_list_factory.h"
@@ -8,7 +8,7 @@
 
 using namespace std;
 
-namespace plugin_regression_interleaving_eager {
+namespace plugin_bidirectional_eager {
 static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.document_synopsis("Regression front to front eager best-first search",
                            "");
@@ -18,6 +18,9 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<shared_ptr<FrontToFrontOpenListFactory>>(
       "open_b", "backward open list");
   parser.add_option<bool>("reopen_closed", "reopen closed nodes", "false");
+  parser.add_option<bool>("bdd", "use BDD for duplicate detection", "false");
+  parser.add_option<bool>("reeval", "do re evaluation", "false");
+  parser.add_option<bool>("front_to_front", "f2f", "false");
   parser.add_option<shared_ptr<Evaluator>>(
       "f_eval_f",
       "set forward evaluator for jump statistics. "
@@ -39,20 +42,17 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
 
-  regression_interleaving_eager_search::add_options_to_parser(parser);
+  bidirectional_eager_search::add_options_to_parser(parser);
   Options opts = parser.parse();
 
-  shared_ptr<
-      regression_interleaving_eager_search::RegressionInterleavingEagerSearch>
-      engine;
+  shared_ptr<bidirectional_eager_search::BidirectionalEagerSearch> engine;
   if (!parser.dry_run()) {
-    engine = make_shared<regression_interleaving_eager_search::
-                             RegressionInterleavingEagerSearch>(opts);
+    engine =
+        make_shared<bidirectional_eager_search::BidirectionalEagerSearch>(opts);
   }
 
   return engine;
 }
 
-static Plugin<SearchEngine> _plugin("regression_interleaving_eager_greedy",
-                                    _parse);
-}  // namespace plugin_regression_interleaving_eager
+static Plugin<SearchEngine> _plugin("bidirectional_eager_greedy", _parse);
+}  // namespace plugin_bidirectional_eager

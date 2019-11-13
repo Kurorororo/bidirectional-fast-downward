@@ -803,16 +803,14 @@ fast_downward_plugin(
     NAME REGRESSION
     HELP "Plugin containing the code for regression search"
     SOURCES
-        regression/plugin_regression_interleaving_eager_greedy
-        regression/regression_interleaving_eager_search
         regression/plugin_bidirectional_lazy_greedy
         regression/bidirectional_lazy_search
         regression/plugin_regression_lazy
         regression/regression_lazy_search
         regression/plugin_eager_sfbs_greedy
         regression/eager_sfbs
-        regression/plugin_regression_front_to_front_eager_greedy
-        regression/regression_front_to_front_eager_search
+        regression/plugin_bidirectional_eager_greedy
+        regression/bidirectional_eager_search
         regression/plugin_regression_eager_greedy
         regression/regression_eager_search
         regression/symbolic_closed

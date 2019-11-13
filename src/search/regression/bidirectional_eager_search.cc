@@ -1,4 +1,4 @@
-#include "regression_front_to_front_eager_search.h"
+#include "bidirectional_eager_search.h"
 
 #include "../evaluation_context.h"
 #include "../evaluator.h"
@@ -19,14 +19,15 @@
 
 using namespace std;
 
-namespace regression_front_to_front_eager_search {
-RegressionFrontToFrontEagerSearch::RegressionFrontToFrontEagerSearch(
-    const Options &opts)
+namespace bidirectional_eager_search {
+BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
     : SearchEngine(opts),
       reopen_closed_nodes(opts.get<bool>("reopen_closed")),
       prune_goal(opts.get<bool>("prune_goal")),
       is_initial(true),
-      reevaluation(Reevaluation(opts.get_enum("reeval"))),
+      bdd(opts.get<bool>("bdd")),
+      front_to_front(opts.get<bool>("front_to_front")),
+      reeval(opts.get<bool>("reeval")),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -34,7 +35,10 @@ RegressionFrontToFrontEagerSearch::RegressionFrontToFrontEagerSearch(
       regression_task(tasks::RegressionTask::get_regression_task()),
       regression_task_proxy(*regression_task),
       regression_successor_generator(regression_task),
-      current_direction(Direction::FORWARD) {
+      for_symbolic_closed_list(regression_task_proxy),
+      bac_symbolic_closed_list(regression_task_proxy),
+      current_direction(Direction::FORWARD),
+      directions(NONE) {
   open_lists[Direction::FORWARD] =
       opts.get<shared_ptr<FrontToFrontOpenListFactory>>("open_f")
           ->create_state_open_list();
@@ -51,7 +55,7 @@ RegressionFrontToFrontEagerSearch::RegressionFrontToFrontEagerSearch(
       opts.get_list<shared_ptr<FrontToFrontHeuristic>>("preferred_b");
 }
 
-void RegressionFrontToFrontEagerSearch::initialize() {
+void BidirectionalEagerSearch::initialize() {
   cout << "Conducting front to front best first search"
        << (reopen_closed_nodes ? " with" : " without")
        << " reopening closed nodes, (real) bound = " << bound << endl;
@@ -129,7 +133,7 @@ void RegressionFrontToFrontEagerSearch::initialize() {
 
     open_lists[Direction::FORWARD]->insert(eval_context_f,
                                            initial_state.get_id());
-    pair_states[initial_state] = global_goal_state.get_id();
+    if (front_to_front) pair_states[initial_state] = global_goal_state.get_id();
   }
 
   open_lists[Direction::BACKWARD]->set_goal(global_goal_state);
@@ -146,18 +150,18 @@ void RegressionFrontToFrontEagerSearch::initialize() {
 
     open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                             global_goal_state.get_id());
-    pair_states[global_goal_state] = initial_state.get_id();
+    if (front_to_front) pair_states[global_goal_state] = initial_state.get_id();
   }
 
   print_initial_evaluator_values(eval_context_b);
 }
 
-void RegressionFrontToFrontEagerSearch::print_statistics() const {
+void BidirectionalEagerSearch::print_statistics() const {
   statistics.print_detailed_statistics();
   partial_state_search_space.print_statistics();
 }
 
-SearchStatus RegressionFrontToFrontEagerSearch::step() {
+SearchStatus BidirectionalEagerSearch::step() {
   tl::optional<SearchNode> node;
   while (true) {
     if (open_lists[Direction::FORWARD]->empty() &&
@@ -182,7 +186,11 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
 
     if (node->is_closed()) continue;
 
-    if (reevaluation != NEVER && current_direction == FORWARD &&
+    if (bdd && current_direction == BACKWARD &&
+        !bac_symbolic_closed_list.IsClosed(s))
+      continue;
+
+    if (front_to_front && reeval && current_direction == FORWARD &&
         !open_lists[BACKWARD]->empty()) {
       auto top = open_lists[BACKWARD]->get_min_value_and_entry();
       StateID top_id = top.second;
@@ -194,9 +202,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
         SearchNode frontier_node =
             partial_state_search_space.get_node(frontier_state);
 
-        if (reevaluation == ALWAYS ||
-            (reevaluation == NOT_PARENT &&
-             frontier_node.get_parent_state_id() != pair_id)) {
+        if (frontier_node.get_parent_state_id() != pair_id) {
           open_lists[Direction::FORWARD]->set_goal(frontier_state);
           EvaluationContext eval_context(s, node->get_g(), false, &statistics);
           pair_states[s] = top_id;
@@ -216,7 +222,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
       }
     }
 
-    if (reevaluation != NEVER && current_direction == BACKWARD &&
+    if (front_to_front && reeval && current_direction == BACKWARD &&
         !open_lists[FORWARD]->empty()) {
       auto top = open_lists[FORWARD]->get_min_value_and_entry();
       StateID top_id = top.second;
@@ -228,9 +234,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
         SearchNode frontier_node =
             partial_state_search_space.get_node(frontier_state);
 
-        if (reevaluation == ALWAYS ||
-            (reevaluation == NOT_PARENT &&
-             frontier_node.get_parent_state_id() != pair_id)) {
+        if (frontier_node.get_parent_state_id() != pair_id) {
           open_lists[Direction::BACKWARD]->set_goal(s);
           EvaluationContext eval_context(frontier_state, node->get_g(), false,
                                          &statistics);
@@ -258,6 +262,14 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
     EvaluationContext eval_context(s, node->get_g(), false, &statistics);
 
     node->close();
+
+    if (bdd) {
+      if (current_direction == FORWARD)
+        for_symbolic_closed_list.Close(s);
+      else if (current_direction == BACKWARD)
+        bac_symbolic_closed_list.Close(s);
+    }
+
     assert(!node->is_dead_end());
     update_f_value_statistics(current_direction, eval_context);
     statistics.inc_expanded();
@@ -273,20 +285,20 @@ SearchStatus RegressionFrontToFrontEagerSearch::step() {
   }
 
   return status;
-}
+}  // namespace bidirectional_eager_search
 
-void RegressionFrontToFrontEagerSearch::reward_progress(Direction d) {
+void BidirectionalEagerSearch::reward_progress(Direction d) {
   // Boost the "preferred operator" open lists somewhat whenever
   // one of the heuristics finds a state with a new best h value.
 
   open_lists[d]->boost_preferred();
 }
 
-void RegressionFrontToFrontEagerSearch::dump_search_space() const {
+void BidirectionalEagerSearch::dump_search_space() const {
   partial_state_search_space.dump(partial_state_task_proxy);
 }
 
-void RegressionFrontToFrontEagerSearch::start_f_value_statistics(
+void BidirectionalEagerSearch::start_f_value_statistics(
     Direction d, EvaluationContext &eval_context) {
   if (f_evaluators[d]) {
     int f_value = eval_context.get_evaluator_value(f_evaluators[d].get());
@@ -297,7 +309,7 @@ void RegressionFrontToFrontEagerSearch::start_f_value_statistics(
 /* TODO: HACK! This is very inefficient for simply looking up an h value.
    Also, if h values are not saved it would recompute h for each and every
    state. */
-void RegressionFrontToFrontEagerSearch::update_f_value_statistics(
+void BidirectionalEagerSearch::update_f_value_statistics(
     Direction d, EvaluationContext &eval_context) {
   if (f_evaluators[d]) {
     int f_value = eval_context.get_evaluator_value(f_evaluators[d].get());
@@ -305,7 +317,7 @@ void RegressionFrontToFrontEagerSearch::update_f_value_statistics(
   }
 }
 
-bool RegressionFrontToFrontEagerSearch::check_goal_and_set_plan(
+bool BidirectionalEagerSearch::check_goal_and_set_plan(
     const GlobalState &state) {
   if (task_properties::is_goal_state(task_proxy, state)) {
     Plan plan;
@@ -317,7 +329,7 @@ bool RegressionFrontToFrontEagerSearch::check_goal_and_set_plan(
   return false;
 }
 
-bool RegressionFrontToFrontEagerSearch::check_initial_and_set_plan(
+bool BidirectionalEagerSearch::check_initial_and_set_plan(
     const GlobalState &state) {
   const GlobalState &initial_state =
       regression_state_registry.get_initial_state();
@@ -338,7 +350,7 @@ bool RegressionFrontToFrontEagerSearch::check_initial_and_set_plan(
   return true;
 }
 
-SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
+SearchStatus BidirectionalEagerSearch::forward_step(
     const tl::optional<SearchNode> &node) {
   GlobalState state = node->get_state();
 
@@ -360,7 +372,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
 
   StateID frontier_id;
 
-  if (!open_lists[Direction::BACKWARD]->empty()) {
+  if (front_to_front && !open_lists[Direction::BACKWARD]->empty()) {
     auto other_top = open_lists[Direction::BACKWARD]->get_min_value_and_entry();
     GlobalState frontier_state =
         regression_state_registry.lookup_state(other_top.second);
@@ -389,9 +401,20 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
       evaluator->notify_state_transition(state, op_id, succ_state);
     }
 
-    if (!succ_node.is_new() && directions[succ_state] == BACKWARD) {
+    if (directions[succ_state] == BACKWARD) {
       meet_set_plan(FORWARD, state, op_id, succ_state);
       return SOLVED;
+    }
+
+    if (bdd && bac_symbolic_closed_list.IsClosed(succ_state)) {
+      StateID subsuming_state_id = get_subsuming_state_id(succ_state);
+
+      if (subsuming_state_id != StateID::no_state) {
+        GlobalState subsuming_state =
+            regression_state_registry.lookup_state(subsuming_state_id);
+        meet_set_plan(FORWARD, state, op_id, subsuming_state);
+        return SOLVED;
+      }
     }
 
     if (succ_node.is_dead_end()) continue;
@@ -441,7 +464,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::forward_step(
   return IN_PROGRESS;
 }
 
-SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
+SearchStatus BidirectionalEagerSearch::backward_step(
     const tl::optional<SearchNode> &node) {
   GlobalState state = node->get_state();
 
@@ -454,7 +477,8 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
   ordered_set::OrderedSet<OperatorID> preferred_operators;
 
   GlobalState frontier_state = regression_state_registry.get_initial_state();
-  if (!open_lists[Direction::FORWARD]->empty()) {
+
+  if (front_to_front && !open_lists[Direction::FORWARD]->empty()) {
     auto other_top = open_lists[Direction::FORWARD]->get_min_value_and_entry();
     frontier_state = regression_state_registry.lookup_state(other_top.second);
     if (check_meeting_and_set_plan(frontier_state, state)) return SOLVED;
@@ -531,9 +555,26 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
       evaluator->notify_state_transition(pre_state, op_id, state);
     }
 
-    if (!pre_node.is_new() && directions[pre_state] == FORWARD) {
+    if (directions[pre_state] == FORWARD) {
       meet_set_plan(BACKWARD, pre_state, op_id, state);
       return SOLVED;
+    }
+
+    if (bdd && for_symbolic_closed_list.IsSubsumed(pre_state)) {
+      StateID subsumed_state_id = get_subsumed_state_id(pre_state);
+
+      if (subsumed_state_id != StateID::no_state) {
+        GlobalState subsumed_state =
+            regression_state_registry.lookup_state(subsumed_state_id);
+        meet_set_plan(BACKWARD, subsumed_state, op_id, state);
+        return SOLVED;
+      }
+    }
+
+    if (bdd && pre_node.is_new() &&
+        bac_symbolic_closed_list.IsClosed(pre_state)) {
+      pre_node.close();
+      continue;
     }
 
     if (pre_node.is_dead_end()) continue;
@@ -553,7 +594,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
       }
       pre_node.open(*node, op, get_adjusted_cost(op));
       directions[pre_state] = Direction::BACKWARD;
-      pair_states[pre_state] = frontier_id;
+      if (front_to_front) pair_states[pre_state] = frontier_id;
 
       open_lists[Direction::BACKWARD]->insert(pre_eval_context,
                                               pre_state.get_id());
@@ -585,7 +626,7 @@ SearchStatus RegressionFrontToFrontEagerSearch::backward_step(
   return IN_PROGRESS;
 }
 
-bool RegressionFrontToFrontEagerSearch::check_meeting_and_set_plan(
+bool BidirectionalEagerSearch::check_meeting_and_set_plan(
     const GlobalState &s_f, const GlobalState &s_b) {
   VariablesProxy variables = partial_state_task_proxy.get_variables();
 
@@ -609,10 +650,10 @@ bool RegressionFrontToFrontEagerSearch::check_meeting_and_set_plan(
   return true;
 }
 
-void RegressionFrontToFrontEagerSearch::meet_set_plan(Direction d,
-                                                      const GlobalState &s_f,
-                                                      OperatorID op_id,
-                                                      const GlobalState &s_b) {
+void BidirectionalEagerSearch::meet_set_plan(Direction d,
+                                             const GlobalState &s_f,
+                                             OperatorID op_id,
+                                             const GlobalState &s_b) {
   Plan plan;
   partial_state_search_space.trace_path(s_f, plan);
 
@@ -630,9 +671,65 @@ void RegressionFrontToFrontEagerSearch::meet_set_plan(Direction d,
   set_plan(plan);
 }
 
+StateID BidirectionalEagerSearch::get_subsuming_state_id(
+    const GlobalState &state) const {
+  VariablesProxy variables = partial_state_task_proxy.get_variables();
+
+  for (StateID state_id : regression_state_registry) {
+    GlobalState another_state =
+        regression_state_registry.lookup_state(state_id);
+
+    if (directions[another_state] == FORWARD) continue;
+
+    bool any = false;
+
+    for (auto var : variables) {
+      if (another_state[var.get_id()] != var.get_domain_size() - 1 &&
+          state[var.get_id()] != another_state[var.get_id()]) {
+        any = true;
+        break;
+      }
+    }
+
+    if (any) continue;
+
+    return state_id;
+  }
+
+  return StateID::no_state;
+}
+
+StateID BidirectionalEagerSearch::get_subsumed_state_id(
+    const GlobalState &state) const {
+  VariablesProxy variables = partial_state_task_proxy.get_variables();
+
+  for (StateID state_id : regression_state_registry) {
+    GlobalState another_state =
+        regression_state_registry.lookup_state(state_id);
+
+    if (directions[another_state] == BACKWARD) continue;
+
+    bool any = false;
+
+    for (auto var : variables) {
+      if (state[var.get_id()] != var.get_domain_size() - 1 &&
+          state[var.get_id()] != another_state[var.get_id()]) {
+        any = true;
+        break;
+      }
+    }
+
+    if (any) continue;
+
+    return state_id;
+  }
+
+  return StateID::no_state;
+}
+
 void add_options_to_parser(OptionParser &parser) {
   SearchEngine::add_pruning_option(parser);
   SearchEngine::add_options_to_parser(parser);
 }
 
-}  // namespace regression_front_to_front_eager_search
+}  // namespace bidirectional_eager_search

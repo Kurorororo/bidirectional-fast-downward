@@ -1,12 +1,17 @@
-#ifndef REGRESSION_FRONT_TO_FRONT_EAGER_SEARCH_H
-#define REGRESSION_FRONT_TO_FRONT_EAGER_SEARCH_H
+#ifndef BIDIRECTIONAL_EAGER_SEARCH_H
+#define BIDIRECTIONAL_EAGER_SEARCH_H
 
-#include "../bidirectional/bidirectional_search.h"
 #include "../front_to_front/front_to_front_heuristic.h"
 #include "../front_to_front/front_to_front_open_list.h"
+#include "../operator_id.h"
+#include "../search_engine.h"
+#include "../search_progress.h"
+#include "../search_space.h"
+
 #include "regression_state_registry.h"
 #include "regression_successor_generator.h"
 #include "regression_task.h"
+#include "symbolic_closed.h"
 
 #include <memory>
 #include <optional.hh>
@@ -19,13 +24,16 @@ class OptionParser;
 class Options;
 }  // namespace options
 
-namespace regression_front_to_front_eager_search {
-class RegressionFrontToFrontEagerSearch : public SearchEngine {
+namespace bidirectional_eager_search {
+class BidirectionalEagerSearch : public SearchEngine {
   enum Direction { NONE = 0, FORWARD = 1, BACKWARD = 2 };
 
   const bool reopen_closed_nodes;
   bool prune_goal;
   bool is_initial;
+  bool bdd;
+  bool front_to_front;
+  bool reeval;
   std::vector<int> goal_state_values;
 
   std::unordered_map<Direction, std::shared_ptr<FrontToFrontStateOpenList>>
@@ -51,9 +59,6 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   SearchStatus backward_step(const tl::optional<SearchNode> &node);
 
  protected:
-  enum Reevaluation { NEVER = 0, ALWAYS = 1, NOT_PARENT = 2 };
-
-  Reevaluation reevaluation;
   const std::shared_ptr<AbstractTask> partial_state_task;
   TaskProxy partial_state_task_proxy;
   RegressionStateRegistry regression_state_registry;
@@ -62,6 +67,8 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   TaskProxy regression_task_proxy;
   regression_successor_generator::RegressionSuccessorGenerator
       regression_successor_generator;
+  symbolic_closed::SymbolicClosedList for_symbolic_closed_list;
+  symbolic_closed::SymbolicClosedList bac_symbolic_closed_list;
   PerStateInformation<StateID> pair_states;
   Direction current_direction;
   PerStateInformation<Direction> directions;
@@ -72,9 +79,13 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
   bool check_meeting_and_set_plan(Direction d, const GlobalState &parent,
                                   OperatorID op_id, const GlobalState &state);
 
+  StateID get_subsuming_state_id(const GlobalState &s) const;
+
+  StateID get_subsumed_state_id(const GlobalState &s) const;
+
  public:
-  explicit RegressionFrontToFrontEagerSearch(const options::Options &opts);
-  virtual ~RegressionFrontToFrontEagerSearch() = default;
+  explicit BidirectionalEagerSearch(const options::Options &opts);
+  virtual ~BidirectionalEagerSearch() = default;
 
   virtual void print_statistics() const override;
 
@@ -82,6 +93,6 @@ class RegressionFrontToFrontEagerSearch : public SearchEngine {
 };
 
 extern void add_options_to_parser(options::OptionParser &parser);
-}  // namespace regression_front_to_front_eager_search
+}  // namespace bidirectional_eager_search
 
 #endif
