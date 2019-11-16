@@ -187,7 +187,7 @@ SearchStatus BidirectionalEagerSearch::step() {
     if (node->is_closed()) continue;
 
     if (bdd && current_direction == BACKWARD &&
-        !bac_symbolic_closed_list.IsClosed(s))
+        bac_symbolic_closed_list.IsClosed(s))
       continue;
 
     if (front_to_front && reeval && current_direction == FORWARD &&
