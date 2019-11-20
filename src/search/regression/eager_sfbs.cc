@@ -32,6 +32,7 @@ EagerSFBS::EagerSFBS(const Options &opts)
       f_evaluator(opts.get<shared_ptr<Evaluator>>("f_eval", nullptr)),
       preferred_operator_evaluators(
           opts.get_list<shared_ptr<FrontToFrontHeuristic>>("preferred")),
+      directions(NONE),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -73,14 +74,14 @@ void EagerSFBS::initialize() {
   for (Evaluator *evaluator : path_dependent_evaluators) {
     evaluator->notify_initial_state(initial_state);
   }
-  is_forward[initial_state] = true;
+  directions[initial_state] = FORWARD;
 
   goal_state_values = regression_task->get_goal_state_values();
   vector<int> to_be_moved = goal_state_values;
   State goal_state = regression_task_proxy.create_state(move(to_be_moved));
   const GlobalState global_goal_state =
       regression_state_registry.create_goal_state(goal_state);
-  is_forward[global_goal_state] = false;
+  directions[global_goal_state] = BACKWARD;
 
   open_list->set_goal(global_goal_state);
   EvaluationContext eval_context(initial_state, 0, true, &statistics);
@@ -232,12 +233,12 @@ SearchStatus EagerSFBS::forward_step(const tl::optional<SearchNode> &n_f,
 
     SearchNode succ_node = partial_state_search_space.get_node(succ_state);
 
-    if (!succ_node.is_new() && !is_forward[succ_state]) {
+    if (directions[succ_state] == BACKWARD) {
       meet_set_plan(s_f, op_id, succ_state, true);
       return SOLVED;
     }
 
-    is_forward[succ_state] = true;
+    directions[succ_state] = FORWARD;
 
     for (Evaluator *evaluator : path_dependent_evaluators) {
       evaluator->notify_state_transition(s_f, op_id, succ_state);
@@ -368,12 +369,12 @@ SearchStatus EagerSFBS::backward_step(const tl::optional<SearchNode> &n_f,
 
     SearchNode pre_node = partial_state_search_space.get_node(pre_state);
 
-    if (!pre_node.is_new() && is_forward[pre_state]) {
+    if (directions[pre_state] == FORWARD) {
       meet_set_plan(pre_state, op_id, s_b, false);
       return SOLVED;
     }
 
-    is_forward[pre_state] = false;
+    directions[pre_state] = BACKWARD;
 
     for (Evaluator *evaluator : path_dependent_evaluators) {
       evaluator->notify_state_transition(pre_state, op_id, s_b);
@@ -453,6 +454,8 @@ bool EagerSFBS::check_goal_and_set_plan(const GlobalState &state) {
     Plan plan;
     partial_state_search_space.trace_path(state, plan);
     set_plan(plan);
+    cout << "#forward actions: " << plan.size() << endl;
+    cout << "#forward actions: " << 0 << endl;
     return true;
   }
 
@@ -475,6 +478,8 @@ bool EagerSFBS::check_initial_and_set_plan(const GlobalState &state) {
   partial_state_search_space.trace_path(state, plan);
   reverse(plan.begin(), plan.end());
   set_plan(plan);
+  cout << "#forward actions: " << 0 << endl;
+  cout << "#forward actions: " << plan.size() << endl;
 
   return true;
 }

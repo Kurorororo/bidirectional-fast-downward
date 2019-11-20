@@ -21,6 +21,8 @@ class Options;
 
 namespace eager_sfbs {
 class EagerSFBS : public SearchEngine {
+  enum Direction { NONE = 0, FORWARD = 1, BACKWARD = 2 };
+
   struct FrontierHash {
     std::size_t operator()(const std::pair<int, int> &entry) const {
       return std::hash<int>()(entry.first) ^ std::hash<int>()(entry.second);
@@ -40,7 +42,7 @@ class EagerSFBS : public SearchEngine {
       preferred_operator_evaluators;
 
   std::unordered_set<std::pair<int, int>, FrontierHash> closed_list;
-  PerStateInformation<bool> is_forward;
+  PerStateInformation<Direction> directions;
 
   void start_f_value_statistics(EvaluationContext &eval_context);
   void update_f_value_statistics(EvaluationContext &eval_context);
