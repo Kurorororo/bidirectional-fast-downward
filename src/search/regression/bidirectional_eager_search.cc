@@ -28,6 +28,12 @@ BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
       bdd(opts.get<bool>("bdd")),
       front_to_front(opts.get<bool>("front_to_front")),
       reeval(opts.get<bool>("reeval")),
+      initial_branching_f(-1),
+      initial_branching_b(-1),
+      sum_branching_f(0),
+      sum_branching_b(0),
+      expanded_f(0),
+      expanded_b(0),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -279,13 +285,15 @@ SearchStatus BidirectionalEagerSearch::step() {
   SearchStatus status = IN_PROGRESS;
 
   if (current_direction == Direction::FORWARD) {
+    ++expanded_f;
     status = forward_step(node);
   } else {
+    ++expanded_b;
     status = backward_step(node);
   }
 
   return status;
-}  // namespace bidirectional_eager_search
+}
 
 void BidirectionalEagerSearch::reward_progress(Direction d) {
   // Boost the "preferred operator" open lists somewhat whenever
@@ -323,6 +331,12 @@ bool BidirectionalEagerSearch::check_goal_and_set_plan(
     Plan plan;
     partial_state_search_space.trace_path(state, plan);
     set_plan(plan);
+    float afb =
+        static_cast<float>(sum_branching_f) / static_cast<float>(expanded_f);
+    float abb =
+        static_cast<float>(sum_branching_b) / static_cast<float>(expanded_b);
+    cout << "Average forward branching: " << afb << endl;
+    cout << "Average backward branching: " << abb << endl;
     return true;
   }
 
@@ -346,6 +360,12 @@ bool BidirectionalEagerSearch::check_initial_and_set_plan(
   partial_state_search_space.trace_path(state, plan);
   reverse(plan.begin(), plan.end());
   set_plan(plan);
+  float afb =
+      static_cast<float>(sum_branching_f) / static_cast<float>(expanded_f);
+  float abb =
+      static_cast<float>(sum_branching_b) / static_cast<float>(expanded_b);
+  cout << "Average forward branching: " << afb << endl;
+  cout << "Average backward branching: " << abb << endl;
 
   return true;
 }
@@ -385,6 +405,14 @@ SearchStatus BidirectionalEagerSearch::forward_step(
 
   vector<OperatorID> applicable_ops;
   successor_generator.generate_applicable_ops(state, applicable_ops);
+
+  if (initial_branching_f == -1) {
+    initial_branching_f = applicable_ops.size();
+    std::cout << "Initial forward branching: " << initial_branching_f
+              << std::endl;
+  }
+
+  sum_branching_f += applicable_ops.size();
 
   for (OperatorID op_id : applicable_ops) {
     OperatorProxy op = task_proxy.get_operators()[op_id];
@@ -498,6 +526,14 @@ SearchStatus BidirectionalEagerSearch::backward_step(
 
   vector<OperatorID> applicable_ops;
   regression_successor_generator.generate_applicable_ops(state, applicable_ops);
+
+  if (initial_branching_b == -1) {
+    initial_branching_b = applicable_ops.size();
+    std::cout << "Initial backward branching: " << initial_branching_b
+              << std::endl;
+  }
+
+  sum_branching_b += applicable_ops.size();
 
   bool do_predecessor_pruning = prune_goal && is_initial;
   if (is_initial) is_initial = false;
@@ -646,6 +682,12 @@ bool BidirectionalEagerSearch::check_meeting_and_set_plan(
   cout << "#backward actions: " << regression_plan.size() << endl;
   plan.insert(plan.end(), regression_plan.begin(), regression_plan.end());
   set_plan(plan);
+  float afb =
+      static_cast<float>(sum_branching_f) / static_cast<float>(expanded_f);
+  float abb =
+      static_cast<float>(sum_branching_b) / static_cast<float>(expanded_b);
+  cout << "Average forward branching: " << afb << endl;
+  cout << "Average backward branching: " << abb << endl;
 
   return true;
 }
@@ -669,6 +711,12 @@ void BidirectionalEagerSearch::meet_set_plan(Direction d,
   cout << "#backward actions: " << regression_plan.size() << endl;
   plan.insert(plan.end(), regression_plan.begin(), regression_plan.end());
   set_plan(plan);
+  float afb =
+      static_cast<float>(sum_branching_f) / static_cast<float>(expanded_f);
+  float abb =
+      static_cast<float>(sum_branching_b) / static_cast<float>(expanded_b);
+  cout << "Average forward branching: " << afb << endl;
+  cout << "Average backward branching: " << abb << endl;
 }
 
 StateID BidirectionalEagerSearch::get_subsuming_state_id(

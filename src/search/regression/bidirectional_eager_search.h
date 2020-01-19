@@ -35,6 +35,12 @@ class BidirectionalEagerSearch : public SearchEngine {
   bool front_to_front;
   bool reeval;
   std::vector<int> goal_state_values;
+  int initial_branching_f;
+  int initial_branching_b;
+  int sum_branching_f;
+  int sum_branching_b;
+  int expanded_f;
+  int expanded_b;
 
   std::unordered_map<Direction, std::shared_ptr<FrontToFrontStateOpenList>>
       open_lists;
