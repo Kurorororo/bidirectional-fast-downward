@@ -21,6 +21,7 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
   parser.add_option<bool>("bdd", "use BDD for duplicate detection", "false");
   parser.add_option<bool>("reeval", "do re evaluation", "false");
   parser.add_option<bool>("front_to_front", "f2f", "false");
+  parser.add_option<bool>("use_bgg", "use BGGs", "false");
   parser.add_option<shared_ptr<Evaluator>>(
       "f_eval_f",
       "set forward evaluator for jump statistics. "
@@ -41,6 +42,8 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
       "[]");
   parser.add_option<bool>(
       "prune_goal", "prune goal state other than the original goal", "false");
+  parser.add_option<shared_ptr<FrontToFrontHeuristic>>(
+      "bgg_eval", "eval for BGGs", "front_to_front_hmax");
 
   bidirectional_eager_search::add_options_to_parser(parser);
   Options opts = parser.parse();

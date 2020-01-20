@@ -789,6 +789,7 @@ fast_downward_plugin(
         front_to_front/front_to_front_open_list
         front_to_front/front_to_front_ff_heuristic
         front_to_front/front_to_front_additive_heuristic
+        front_to_front/front_to_front_max_heuristic
         front_to_front/front_to_front_relaxation_heuristic
         front_to_front/front_to_front_goal_count_heuristic
         front_to_front/front_to_front_greater

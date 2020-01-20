@@ -3,6 +3,7 @@
 
 #include "../front_to_front/front_to_front_heuristic.h"
 #include "../front_to_front/front_to_front_open_list.h"
+#include "../heuristics/max_heuristic.h"
 #include "../operator_id.h"
 #include "../search_engine.h"
 #include "../search_progress.h"
@@ -34,6 +35,7 @@ class BidirectionalEagerSearch : public SearchEngine {
   bool bdd;
   bool front_to_front;
   bool reeval;
+  bool use_bgg;
   std::vector<int> goal_state_values;
   int initial_branching_f;
   int initial_branching_b;
@@ -41,6 +43,7 @@ class BidirectionalEagerSearch : public SearchEngine {
   int sum_branching_b;
   int expanded_f;
   int expanded_b;
+  int h_min_bgg;
 
   std::unordered_map<Direction, std::shared_ptr<FrontToFrontStateOpenList>>
       open_lists;
@@ -51,6 +54,7 @@ class BidirectionalEagerSearch : public SearchEngine {
   std::unordered_map<Direction,
                      std::vector<std::shared_ptr<FrontToFrontHeuristic>>>
       preferred_operator_evaluators;
+  StateID arg_min_bgg;
 
   void start_f_value_statistics(Direction d, EvaluationContext &eval_context);
   void update_f_value_statistics(Direction d, EvaluationContext &eval_context);
@@ -78,6 +82,8 @@ class BidirectionalEagerSearch : public SearchEngine {
   PerStateInformation<StateID> pair_states;
   Direction current_direction;
   PerStateInformation<Direction> directions;
+  std::vector<StateID> bggs;
+  std::shared_ptr<FrontToFrontHeuristic> bgg_eval;
 
   virtual void initialize() override;
   virtual SearchStatus step() override;

@@ -28,12 +28,15 @@ BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
       bdd(opts.get<bool>("bdd")),
       front_to_front(opts.get<bool>("front_to_front")),
       reeval(opts.get<bool>("reeval")),
+      use_bgg(opts.get<bool>("use_bgg")),
       initial_branching_f(-1),
       initial_branching_b(-1),
       sum_branching_f(0),
       sum_branching_b(0),
       expanded_f(0),
       expanded_b(0),
+      h_min_bgg(-1),
+      arg_min_bgg(StateID::no_state),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -44,7 +47,8 @@ BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
       for_symbolic_closed_list(regression_task_proxy),
       bac_symbolic_closed_list(regression_task_proxy),
       current_direction(Direction::FORWARD),
-      directions(NONE) {
+      directions(NONE),
+      bgg_eval(opts.get<shared_ptr<FrontToFrontHeuristic>>("bgg_eval")) {
   open_lists[Direction::FORWARD] =
       opts.get<shared_ptr<FrontToFrontOpenListFactory>>("open_f")
           ->create_state_open_list();
@@ -157,6 +161,15 @@ void BidirectionalEagerSearch::initialize() {
     open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                             global_goal_state.get_id());
     if (front_to_front) pair_states[global_goal_state] = initial_state.get_id();
+  }
+
+  if (use_bgg) {
+    bgg_eval->set_goal(global_goal_state);
+    EvaluationContext eval_context_bgg(initial_state, 0, true, &statistics);
+    EvaluationResult er = bgg_eval->compute_result(eval_context_bgg);
+    h_min_bgg = er.get_evaluator_value();
+    arg_min_bgg = global_goal_state.get_id();
+    statistics.inc_evaluated_states();
   }
 
   print_initial_evaluator_values(eval_context_b);
@@ -401,6 +414,10 @@ SearchStatus BidirectionalEagerSearch::forward_step(
 
     frontier_id = frontier_state.get_id();
     open_lists[Direction::FORWARD]->set_goal(frontier_state);
+  } else if (use_bgg) {
+    GlobalState arg_min_bgg_state =
+        regression_state_registry.lookup_state(arg_min_bgg);
+    open_lists[Direction::FORWARD]->set_goal(arg_min_bgg_state);
   }
 
   vector<OperatorID> applicable_ops;
@@ -411,8 +428,6 @@ SearchStatus BidirectionalEagerSearch::forward_step(
     std::cout << "Initial forward branching: " << initial_branching_f
               << std::endl;
   }
-
-  sum_branching_f += applicable_ops.size();
 
   for (OperatorID op_id : applicable_ops) {
     OperatorProxy op = task_proxy.get_operators()[op_id];
@@ -442,6 +457,14 @@ SearchStatus BidirectionalEagerSearch::forward_step(
             regression_state_registry.lookup_state(subsuming_state_id);
         meet_set_plan(FORWARD, state, op_id, subsuming_state);
         return SOLVED;
+      }
+    }
+
+    if (use_bgg) {
+      for (StateID b : bggs) {
+        GlobalState frontier_state = regression_state_registry.lookup_state(b);
+        if (check_meeting_and_set_plan(succ_state, frontier_state))
+          return SOLVED;
       }
     }
 
@@ -617,6 +640,24 @@ SearchStatus BidirectionalEagerSearch::backward_step(
 
     if (pre_node.is_new()) {
       int succ_g = node->get_g() + get_adjusted_cost(op);
+
+      if (use_bgg) {
+        const GlobalState &initial_state =
+            regression_state_registry.get_initial_state();
+        bgg_eval->set_goal(pre_state);
+        EvaluationContext pre_eval_context(initial_state, succ_g, is_preferred,
+                                           &statistics);
+        statistics.inc_evaluated_states();
+        EvaluationResult er = bgg_eval->compute_result(pre_eval_context);
+        if (er.is_infinite()) continue;
+
+        if (er.get_evaluator_value() < h_min_bgg) {
+          h_min_bgg = er.get_evaluator_value();
+          arg_min_bgg = pre_state.get_id();
+        }
+
+        bggs.push_back(pre_state_id);
+      }
 
       open_lists[Direction::BACKWARD]->set_goal(pre_state);
       EvaluationContext pre_eval_context(frontier_state, succ_g, is_preferred,
