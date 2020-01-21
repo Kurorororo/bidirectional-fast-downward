@@ -43,6 +43,9 @@ class BidirectionalLazySearch : public SearchEngine {
   bool bdd;
   bool front_to_front;
   bool reeval;
+  bool use_bgg;
+  int h_min_bgg;
+  StateID arg_min_bgg;
   std::shared_ptr<utils::RandomNumberGenerator> rng;
 
   std::vector<Evaluator *> for_path_dependent_evaluators;
@@ -81,6 +84,8 @@ class BidirectionalLazySearch : public SearchEngine {
   EdgeOpenListEntry previous_entry;
   StateID parent_id;
   EvaluationContext parent_eval_context;
+  std::vector<StateID> bggs;
+  std::shared_ptr<FrontToFrontHeuristic> bgg_eval;
 
   virtual void initialize() override;
   virtual SearchStatus step() override;

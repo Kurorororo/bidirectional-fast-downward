@@ -29,6 +29,9 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       bdd(opts.get<bool>("bdd")),
       front_to_front(opts.get<bool>("front_to_front")),
       reeval(opts.get<bool>("reeval")),
+      use_bgg(opts.get<bool>("use_bgg")),
+      h_min_bgg(-1),
+      arg_min_bgg(StateID::no_state),
       rng(utils::parse_rng_from_options(opts)),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
@@ -58,7 +61,8 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
       bac_current_eval_context(for_current_state, 0, true, &statistics),
       previous_entry(make_pair(StateID::no_state, OperatorID::no_operator)),
       parent_id(StateID::no_state),
-      parent_eval_context(for_current_state, 0, true, &statistics) {
+      parent_eval_context(for_current_state, 0, true, &statistics),
+      bgg_eval(opts.get<shared_ptr<FrontToFrontHeuristic>>("bgg_eval")) {
   /*
     We initialize current_eval_context in such a way that the initial node
     counts as "preferred".
@@ -307,6 +311,15 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
         }
       }
 
+      if (use_bgg) {
+        for (StateID b : bggs) {
+          GlobalState frontier_state =
+              regression_state_registry.lookup_state(b);
+          if (check_meeting_and_set_plan(for_current_state, frontier_state))
+            return SOLVED;
+        }
+      }
+
       directions[for_current_state] = FORWARD;
     }
 
@@ -329,6 +342,10 @@ SearchStatus BidirectionalLazySearch::for_fetch_next_state() {
     for_open_list->set_goal(frontier_state);
 
     if (reeval) pair_state[for_current_state] = frontier_state.get_id();
+  } else if (use_bgg) {
+    GlobalState arg_min_bgg_state =
+        regression_state_registry.lookup_state(arg_min_bgg);
+    // for_open_list->set_goal(arg_min_bgg_state);
   }
 
   for_current_eval_context =
@@ -606,6 +623,25 @@ SearchStatus BidirectionalLazySearch::bac_step() {
         evaluator->notify_state_transition(
             bac_current_state, bac_current_operator_id, child_state);
     }
+
+    if (use_bgg) {
+      const GlobalState &initial_state =
+          regression_state_registry.get_initial_state();
+      EvaluationContext pre_eval_context(
+          initial_state, bac_current_eval_context.get_g_value(),
+          bac_current_eval_context.is_preferred(), &statistics);
+      statistics.inc_evaluated_states();
+      EvaluationResult er = bgg_eval->compute_result(pre_eval_context);
+      if (er.is_infinite()) return for_fetch_next_state();
+
+      if (h_min_bgg == -1 || er.get_evaluator_value() < h_min_bgg) {
+        h_min_bgg = er.get_evaluator_value();
+        arg_min_bgg = bac_current_state.get_id();
+      }
+
+      bggs.push_back(bac_current_state.get_id());
+    }
+
     statistics.inc_evaluated_states();
     if (!bac_open_list->is_dead_end(bac_current_eval_context)) {
       // TODO: Generalize code for using multiple evaluators.
