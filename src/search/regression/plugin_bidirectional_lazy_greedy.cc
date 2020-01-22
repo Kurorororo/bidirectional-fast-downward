@@ -34,10 +34,10 @@ static shared_ptr<SearchEngine> _parse(OptionParser &parser) {
       "(Optional; if no evaluator is used, jump statistics will not be "
       "displayed.)",
       OptionParser::NONE);
-  parser.add_list_option<shared_ptr<Evaluator>>(
+  parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>(
       "preferred_f", "use forward preferred operators of these evaluators",
       "[]");
-  parser.add_list_option<shared_ptr<Evaluator>>(
+  parser.add_list_option<shared_ptr<FrontToFrontHeuristic>>(
       "preferred_b", "use backward preferred operators of these evaluators",
       "[]");
   parser.add_option<shared_ptr<FrontToFrontHeuristic>>(

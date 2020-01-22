@@ -70,12 +70,12 @@ BidirectionalLazySearch::BidirectionalLazySearch(const Options &opts)
 }
 
 void BidirectionalLazySearch::for_set_preferred_operator_evaluators(
-    vector<shared_ptr<Evaluator>> &evaluators) {
+    vector<shared_ptr<FrontToFrontHeuristic>> &evaluators) {
   for_preferred_operator_evaluators = evaluators;
 }
 
 void BidirectionalLazySearch::bac_set_preferred_operator_evaluators(
-    vector<shared_ptr<Evaluator>> &evaluators) {
+    vector<shared_ptr<FrontToFrontHeuristic>> &evaluators) {
   bac_preferred_operator_evaluators = evaluators;
 }
 
@@ -165,7 +165,7 @@ vector<OperatorID> BidirectionalLazySearch::get_predecessor_operators(
 
 void BidirectionalLazySearch::generate_successors() {
   ordered_set::OrderedSet<OperatorID> preferred_operators;
-  for (const shared_ptr<Evaluator> &preferred_operator_evaluator :
+  for (const shared_ptr<FrontToFrontHeuristic> &preferred_operator_evaluator :
        for_preferred_operator_evaluators) {
     collect_preferred_operators(for_current_eval_context,
                                 preferred_operator_evaluator.get(),

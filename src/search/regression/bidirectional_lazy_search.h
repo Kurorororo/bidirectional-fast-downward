@@ -49,9 +49,9 @@ class BidirectionalLazySearch : public SearchEngine {
   std::shared_ptr<utils::RandomNumberGenerator> rng;
 
   std::vector<Evaluator *> for_path_dependent_evaluators;
-  std::vector<std::shared_ptr<Evaluator>> for_preferred_operator_evaluators;
+  std::vector<std::shared_ptr<FrontToFrontHeuristic>> for_preferred_operator_evaluators;
   std::vector<Evaluator *> bac_path_dependent_evaluators;
-  std::vector<std::shared_ptr<Evaluator>> bac_preferred_operator_evaluators;
+  std::vector<std::shared_ptr<FrontToFrontHeuristic>> bac_preferred_operator_evaluators;
 
   const std::shared_ptr<AbstractTask> partial_state_task;
   TaskProxy partial_state_task_proxy;
@@ -122,9 +122,9 @@ class BidirectionalLazySearch : public SearchEngine {
   virtual ~BidirectionalLazySearch() = default;
 
   void for_set_preferred_operator_evaluators(
-      std::vector<std::shared_ptr<Evaluator>> &evaluators);
+      std::vector<std::shared_ptr<FrontToFrontHeuristic>> &evaluators);
   void bac_set_preferred_operator_evaluators(
-      std::vector<std::shared_ptr<Evaluator>> &evaluators);
+      std::vector<std::shared_ptr<FrontToFrontHeuristic>> &evaluators);
 
   virtual void print_statistics() const override;
 };
