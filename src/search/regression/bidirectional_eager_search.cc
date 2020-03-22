@@ -1,21 +1,19 @@
 #include "bidirectional_eager_search.h"
 
-#include "../evaluation_context.h"
-#include "../evaluator.h"
-#include "../front_to_front/front_to_front_open_list_factory.h"
-#include "../option_parser.h"
-
-#include "../algorithms/ordered_set.h"
-#include "../task_utils/successor_generator.h"
-#include "../task_utils/task_properties.h"
-
-#include "../utils/logging.h"
-
 #include <cassert>
 #include <cstdlib>
 #include <memory>
 #include <optional.hh>
 #include <set>
+
+#include "../algorithms/ordered_set.h"
+#include "../evaluation_context.h"
+#include "../evaluator.h"
+#include "../front_to_front/front_to_front_open_list_factory.h"
+#include "../option_parser.h"
+#include "../task_utils/successor_generator.h"
+#include "../task_utils/task_properties.h"
+#include "../utils/logging.h"
 
 using namespace std;
 
@@ -26,17 +24,18 @@ BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
       prune_goal(opts.get<bool>("prune_goal")),
       is_initial(true),
       bdd(opts.get<bool>("bdd")),
-      front_to_front(opts.get<bool>("front_to_front")),
-      reeval(opts.get<bool>("reeval")),
-      use_bgg(opts.get<bool>("use_bgg")),
       initial_branching_f(-1),
       initial_branching_b(-1),
       sum_branching_f(0),
       sum_branching_b(0),
       expanded_f(0),
       expanded_b(0),
-      h_min_bgg(-1),
-      arg_min_bgg(StateID::no_state),
+      d_node_value_f(-1),
+      d_node_value_b(-1),
+      max_steps(opts.get<int>("max_steps")),
+      steps(0),
+      d_node_f(StateID::no_state),
+      d_node_b(StateID::no_state),
       partial_state_task(tasks::PartialStateTask::get_partial_state_task()),
       partial_state_task_proxy(*partial_state_task),
       regression_state_registry(partial_state_task_proxy),
@@ -48,7 +47,9 @@ BidirectionalEagerSearch::BidirectionalEagerSearch(const Options &opts)
       bac_symbolic_closed_list(regression_task_proxy),
       current_direction(Direction::FORWARD),
       directions(NONE),
-      bgg_eval(opts.get<shared_ptr<FrontToFrontHeuristic>>("bgg_eval")) {
+      bgg_eval(opts.get<shared_ptr<FrontToFrontHeuristic>>("bgg_eval")),
+      d_node_type(DNodeType(opts.get_enum("d_node_type"))),
+      reeval_method(ReevalMethod(opts.get_enum("reeval"))) {
   open_lists[Direction::FORWARD] =
       opts.get<shared_ptr<FrontToFrontOpenListFactory>>("open_f")
           ->create_state_open_list();
@@ -143,7 +144,8 @@ void BidirectionalEagerSearch::initialize() {
 
     open_lists[Direction::FORWARD]->insert(eval_context_f,
                                            initial_state.get_id());
-    if (front_to_front) pair_states[initial_state] = global_goal_state.get_id();
+    if (d_node_type != FRONT_TO_END)
+      pair_states[initial_state] = global_goal_state.get_id();
   }
 
   open_lists[Direction::BACKWARD]->set_goal(global_goal_state);
@@ -160,16 +162,24 @@ void BidirectionalEagerSearch::initialize() {
 
     open_lists[Direction::BACKWARD]->insert(eval_context_b,
                                             global_goal_state.get_id());
-    if (front_to_front) pair_states[global_goal_state] = initial_state.get_id();
+    if (d_node_type != FRONT_TO_END)
+      pair_states[global_goal_state] = initial_state.get_id();
   }
 
-  if (use_bgg) {
+  d_node_f = global_goal_state.get_id();
+  d_node_b = initial_state.get_id();
+
+  if (d_node_type == BGG) {
     bgg_eval->set_goal(global_goal_state);
     EvaluationContext eval_context_bgg(initial_state, 0, true, &statistics);
     EvaluationResult er = bgg_eval->compute_result(eval_context_bgg);
-    h_min_bgg = er.get_evaluator_value();
-    arg_min_bgg = global_goal_state.get_id();
+    d_node_value_f = er.get_evaluator_value();
     statistics.inc_evaluated_states();
+  }
+
+  if (d_node_type == MAX_G) {
+    d_node_value_f = 0;
+    d_node_value_b = 0;
   }
 
   print_initial_evaluator_values(eval_context_b);
@@ -209,22 +219,26 @@ SearchStatus BidirectionalEagerSearch::step() {
         bac_symbolic_closed_list.IsClosed(s))
       continue;
 
-    if (front_to_front && reeval && current_direction == FORWARD &&
-        !open_lists[BACKWARD]->empty()) {
-      auto top = open_lists[BACKWARD]->get_min_value_and_entry();
-      StateID top_id = top.second;
+    if (reeval_method == NOT_SIMILAR && current_direction == FORWARD &&
+        (d_node_type == MAX_G ||
+         (d_node_type == TTBS && !open_lists[BACKWARD]->empty()))) {
+      if (d_node_type == TTBS) {
+        auto top = open_lists[BACKWARD]->get_min_value_and_entry();
+        d_node_f = top.second;
+      }
+
       StateID pair_id = pair_states[s];
 
-      if (pair_id != top_id) {
+      if (pair_id != d_node_f) {
         GlobalState frontier_state =
-            regression_state_registry.lookup_state(top_id);
+            regression_state_registry.lookup_state(d_node_f);
         SearchNode frontier_node =
             partial_state_search_space.get_node(frontier_state);
 
         if (frontier_node.get_parent_state_id() != pair_id) {
           open_lists[Direction::FORWARD]->set_goal(frontier_state);
           EvaluationContext eval_context(s, node->get_g(), false, &statistics);
-          pair_states[s] = top_id;
+          pair_states[s] = d_node_f;
 
           statistics.inc_evaluated_states();
 
@@ -241,15 +255,19 @@ SearchStatus BidirectionalEagerSearch::step() {
       }
     }
 
-    if (front_to_front && reeval && current_direction == BACKWARD &&
-        !open_lists[FORWARD]->empty()) {
-      auto top = open_lists[FORWARD]->get_min_value_and_entry();
-      StateID top_id = top.second;
+    if (reeval_method == NOT_SIMILAR && current_direction == BACKWARD &&
+        (d_node_type == MAX_G ||
+         (d_node_type == TTBS && !open_lists[FORWARD]->empty()))) {
+      if (d_node_type == TTBS) {
+        auto top = open_lists[FORWARD]->get_min_value_and_entry();
+        d_node_b = top.second;
+      }
+
       StateID pair_id = pair_states[s];
 
-      if (pair_id != top_id) {
+      if (pair_id != d_node_b) {
         GlobalState frontier_state =
-            regression_state_registry.lookup_state(top_id);
+            regression_state_registry.lookup_state(d_node_b);
         SearchNode frontier_node =
             partial_state_search_space.get_node(frontier_state);
 
@@ -257,7 +275,7 @@ SearchStatus BidirectionalEagerSearch::step() {
           open_lists[Direction::BACKWARD]->set_goal(s);
           EvaluationContext eval_context(frontier_state, node->get_g(), false,
                                          &statistics);
-          pair_states[s] = top_id;
+          pair_states[s] = d_node_b;
 
           statistics.inc_evaluated_states();
 
@@ -405,7 +423,7 @@ SearchStatus BidirectionalEagerSearch::forward_step(
 
   StateID frontier_id;
 
-  if (front_to_front && !open_lists[Direction::BACKWARD]->empty()) {
+  if (d_node_type == TTBS && !open_lists[Direction::BACKWARD]->empty()) {
     auto other_top = open_lists[Direction::BACKWARD]->get_min_value_and_entry();
     GlobalState frontier_state =
         regression_state_registry.lookup_state(other_top.second);
@@ -414,10 +432,11 @@ SearchStatus BidirectionalEagerSearch::forward_step(
 
     frontier_id = frontier_state.get_id();
     open_lists[Direction::FORWARD]->set_goal(frontier_state);
-  } else if (use_bgg) {
-    GlobalState arg_min_bgg_state =
-        regression_state_registry.lookup_state(arg_min_bgg);
-    open_lists[Direction::FORWARD]->set_goal(arg_min_bgg_state);
+  }
+
+  if (d_node_type == BGG || d_node_type == MAX_G) {
+    GlobalState d_node_state = regression_state_registry.lookup_state(d_node_f);
+    open_lists[Direction::FORWARD]->set_goal(d_node_state);
   }
 
   vector<OperatorID> applicable_ops;
@@ -460,7 +479,7 @@ SearchStatus BidirectionalEagerSearch::forward_step(
       }
     }
 
-    if (use_bgg) {
+    if (d_node_type == BGG) {
       for (StateID b : bggs) {
         GlobalState frontier_state = regression_state_registry.lookup_state(b);
         if (check_meeting_and_set_plan(succ_state, frontier_state))
@@ -486,6 +505,11 @@ SearchStatus BidirectionalEagerSearch::forward_step(
       directions[succ_state] = Direction::FORWARD;
       pair_states[succ_state] = frontier_id;
 
+      if (d_node_type == MAX_G && succ_g > d_node_value_b) {
+        d_node_b = succ_state.get_id();
+        d_node_value_b = succ_g;
+      }
+
       open_lists[Direction::FORWARD]->insert(succ_eval_context,
                                              succ_state.get_id());
       if (search_progress.check_progress(succ_eval_context)) {
@@ -510,7 +534,12 @@ SearchStatus BidirectionalEagerSearch::forward_step(
     }
   }
 
-  current_direction = BACKWARD;
+  if (++steps >= max_steps) {
+    current_direction = BACKWARD;
+    steps = 0;
+
+    if (reeval_method == ALL) backward_reeval_all();
+  }
 
   return IN_PROGRESS;
 }
@@ -529,9 +558,14 @@ SearchStatus BidirectionalEagerSearch::backward_step(
 
   GlobalState frontier_state = regression_state_registry.get_initial_state();
 
-  if (front_to_front && !open_lists[Direction::FORWARD]->empty()) {
+  if (d_node_type == TTBS && !open_lists[Direction::FORWARD]->empty()) {
     auto other_top = open_lists[Direction::FORWARD]->get_min_value_and_entry();
     frontier_state = regression_state_registry.lookup_state(other_top.second);
+    if (check_meeting_and_set_plan(frontier_state, state)) return SOLVED;
+  }
+
+  if (d_node_type == MAX_G) {
+    frontier_state = regression_state_registry.lookup_state(d_node_b);
     if (check_meeting_and_set_plan(frontier_state, state)) return SOLVED;
   }
 
@@ -641,7 +675,7 @@ SearchStatus BidirectionalEagerSearch::backward_step(
     if (pre_node.is_new()) {
       int succ_g = node->get_g() + get_adjusted_cost(op);
 
-      if (use_bgg) {
+      if (d_node_type == BGG) {
         const GlobalState &initial_state =
             regression_state_registry.get_initial_state();
         bgg_eval->set_goal(pre_state);
@@ -651,9 +685,9 @@ SearchStatus BidirectionalEagerSearch::backward_step(
         EvaluationResult er = bgg_eval->compute_result(pre_eval_context);
         if (er.is_infinite()) continue;
 
-        if (er.get_evaluator_value() < h_min_bgg) {
-          h_min_bgg = er.get_evaluator_value();
-          arg_min_bgg = pre_state.get_id();
+        if (er.get_evaluator_value() < d_node_value_f) {
+          d_node_value_f = er.get_evaluator_value();
+          d_node_f = pre_state.get_id();
         }
 
         bggs.push_back(pre_state_id);
@@ -671,7 +705,12 @@ SearchStatus BidirectionalEagerSearch::backward_step(
       }
       pre_node.open(*node, op, get_adjusted_cost(op));
       directions[pre_state] = Direction::BACKWARD;
-      if (front_to_front) pair_states[pre_state] = frontier_id;
+      if (d_node_type != FRONT_TO_END) pair_states[pre_state] = frontier_id;
+
+      if (d_node_type == MAX_G && succ_g > d_node_value_f) {
+        d_node_f = pre_state.get_id();
+        d_node_value_f = succ_g;
+      }
 
       open_lists[Direction::BACKWARD]->insert(pre_eval_context,
                                               pre_state.get_id());
@@ -689,7 +728,7 @@ SearchStatus BidirectionalEagerSearch::backward_step(
         open_lists[Direction::BACKWARD]->set_goal(pre_state);
         EvaluationContext pre_eval_context(frontier_state, pre_node.get_g(),
                                            is_preferred, &statistics);
-        pair_states[pre_state] = frontier_id;
+        if (d_node_type != FRONT_TO_END) pair_states[pre_state] = frontier_id;
         open_lists[Direction::BACKWARD]->insert(pre_eval_context,
                                                 pre_state.get_id());
       } else {
@@ -698,9 +737,97 @@ SearchStatus BidirectionalEagerSearch::backward_step(
     }
   }
 
-  current_direction = FORWARD;
+  if (++steps >= max_steps) {
+    current_direction = FORWARD;
+    steps = 0;
+
+    if (reeval_method == ALL) forward_reeval_all();
+  }
 
   return IN_PROGRESS;
+}
+
+void BidirectionalEagerSearch::forward_reeval_all() {
+  vector<EvaluationContext> contexts;
+  vector<StateID> ids;
+
+  if (d_node_type == TTBS) {
+    if (open_lists[BACKWARD]->empty()) return;
+    auto top = open_lists[BACKWARD]->get_min_value_and_entry();
+    d_node_f = top.second;
+  }
+
+  while (!open_lists[FORWARD]->empty()) {
+    StateID id = open_lists[FORWARD]->remove_min();
+    GlobalState s = regression_state_registry.lookup_state(id);
+    SearchNode node = partial_state_search_space.get_node(s);
+    StateID pair_id = pair_states[s];
+
+    if (pair_id != d_node_f) {
+      GlobalState frontier_state =
+          regression_state_registry.lookup_state(d_node_f);
+
+      open_lists[Direction::FORWARD]->set_goal(frontier_state);
+      EvaluationContext eval_context(s, node.get_g(), false, &statistics);
+      pair_states[s] = d_node_f;
+
+      statistics.inc_evaluated_states();
+
+      if (open_lists[Direction::FORWARD]->is_dead_end(eval_context)) {
+        node.mark_as_dead_end();
+        statistics.inc_dead_ends();
+      } else {
+        ids.push_back(id);
+        contexts.push_back(eval_context);
+      }
+    }
+  }
+
+  for (int i = 0, n = ids.size(); i < n; ++i) {
+    open_lists[Direction::FORWARD]->insert(contexts[i], ids[i]);
+  }
+}
+
+void BidirectionalEagerSearch::backward_reeval_all() {
+  vector<EvaluationContext> contexts;
+  vector<StateID> ids;
+
+  if (d_node_type == TTBS) {
+    if (open_lists[FORWARD]->empty()) return;
+    auto top = open_lists[FORWARD]->get_min_value_and_entry();
+    d_node_b = top.second;
+  }
+
+  while (!open_lists[BACKWARD]->empty()) {
+    StateID id = open_lists[BACKWARD]->remove_min();
+    GlobalState s = regression_state_registry.lookup_state(id);
+    SearchNode node = partial_state_search_space.get_node(s);
+    StateID pair_id = pair_states[s];
+
+    if (pair_id != d_node_b) {
+      GlobalState frontier_state =
+          regression_state_registry.lookup_state(d_node_b);
+
+      open_lists[Direction::BACKWARD]->set_goal(s);
+      EvaluationContext eval_context(frontier_state, node.get_g(), false,
+                                     &statistics);
+      pair_states[s] = d_node_b;
+
+      statistics.inc_evaluated_states();
+
+      if (open_lists[Direction::BACKWARD]->is_dead_end(eval_context)) {
+        node.mark_as_dead_end();
+        statistics.inc_dead_ends();
+      } else {
+        ids.push_back(id);
+        contexts.push_back(eval_context);
+      }
+    }
+  }
+
+  for (int i = 0, n = ids.size(); i < n; ++i) {
+    open_lists[Direction::BACKWARD]->insert(contexts[i], ids[i]);
+  }
 }
 
 bool BidirectionalEagerSearch::check_meeting_and_set_plan(
