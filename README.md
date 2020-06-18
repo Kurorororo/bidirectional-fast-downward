@@ -1,7 +1,6 @@
 # Bidirectional Fast Downward: Satisficing Bidirectional Heuristic Search Planner
 
-## Reference
-Front to Front Heuristic Search for Satisficing Classical Planning.
+Ryo Kuroiwa and Alex Fukunaga. Front to Front Heuristic Search for Satisficing Classical Planning. IJCAI 2020.
 
 ## Build
 
